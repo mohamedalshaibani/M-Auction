@@ -415,7 +415,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
       stream: FirebaseFirestore.instance
           .collection('auctions')
           .doc(widget.auctionId)
-          .snapshots(includeMetadataChanges: true),
+          .snapshots(),
       builder: (context, auctionSnapshot) {
         if (auctionSnapshot.hasError) {
           return Scaffold(
