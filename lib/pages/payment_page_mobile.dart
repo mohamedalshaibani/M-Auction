@@ -32,6 +32,12 @@ class PaymentPageImpl extends StatelessWidget {
                 color: Colors.grey.shade400,
               ),
               const SizedBox(height: 24),
+              Icon(
+                Icons.info_outline,
+                size: 48,
+                color: Colors.orange.shade400,
+              ),
+              const SizedBox(height: 16),
               Text(
                 'Payments Available on Web',
                 style: Theme.of(context).textTheme.headlineSmall,
@@ -39,11 +45,35 @@ class PaymentPageImpl extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Payments are currently available on the web platform. Please visit our website to complete your payment.',
+                'Payments are currently available on the web platform only. Please visit our website to complete your payment.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey.shade600,
                     ),
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Mobile payment integration coming soon',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 32),
               if (amount > 0)
