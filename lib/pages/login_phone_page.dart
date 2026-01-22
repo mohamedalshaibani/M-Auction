@@ -147,6 +147,15 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Logo
+                      Center(
+                        child: Image.asset(
+                          'assets/branding/logo_light.png',
+                          width: 180,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       // Header
                       Text(
                         'Welcome to M Auction',

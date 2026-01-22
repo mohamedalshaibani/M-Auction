@@ -100,6 +100,15 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Logo
+                      Center(
+                        child: Image.asset(
+                          'assets/branding/logo_light.png',
+                          width: 180,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       // Header
                       Text(
                         'Enter Verification Code',

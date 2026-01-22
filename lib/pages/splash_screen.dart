@@ -86,35 +86,11 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo placeholder - using icon for now, can be replaced with actual logo image
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.gavel,
-                  size: 64,
-                  color: AppTheme.primaryBlue,
-                ),
-              ),
-              const SizedBox(height: 32),
-              Text(
-                'M Auction',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.2,
-                    ),
+              // Logo - using logo_dark.png for dark gradient background
+              Image.asset(
+                'assets/branding/logo_dark.png',
+                width: 220,
+                fit: BoxFit.contain,
               ),
               const SizedBox(height: 48),
               const SizedBox(
