@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="luxury_auction_app"
+        android:label="M Auction"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
