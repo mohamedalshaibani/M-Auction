@@ -51,7 +51,8 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
       );
 
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/authGate');
+        // Navigate to main shell after profile creation
+        Navigator.of(context).pushReplacementNamed('/home');
       }
     } catch (e) {
       if (mounted) {

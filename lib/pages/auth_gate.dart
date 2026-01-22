@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/firestore_service.dart';
 import 'login_phone_page.dart';
 import 'create_profile_page.dart';
-import 'home_page.dart';
+import 'main_shell.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -135,8 +135,8 @@ class _AuthGateState extends State<AuthGate> {
             final exists = futureSnapshot.data ?? false;
 
             if (exists) {
-              // User exists -> return HomePage
-              return const HomePage();
+              // User exists -> return MainShell
+              return const MainShell();
             } else {
               // User doesn't exist -> return CreateProfilePage
               return const CreateProfilePage();

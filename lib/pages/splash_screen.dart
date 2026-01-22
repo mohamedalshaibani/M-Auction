@@ -4,7 +4,7 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'login_phone_page.dart';
 import 'create_profile_page.dart';
-import 'home_page.dart';
+import 'main_shell.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -47,9 +47,9 @@ class _SplashScreenState extends State<SplashScreen> {
       if (!mounted) return;
 
       if (userExists) {
-        // User exists -> HomePage
+        // User exists -> MainShell
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomePage()),
+          MaterialPageRoute(builder: (_) => const MainShell()),
         );
       } else {
         // User doesn't exist -> CreateProfilePage

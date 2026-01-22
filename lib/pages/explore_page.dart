@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
-import 'auction_detail_page.dart';
+import '../theme/app_theme.dart';
 
 class ExplorePage extends StatelessWidget {
   const ExplorePage({super.key});
@@ -12,7 +12,7 @@ class ExplorePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Explore Auctions'),
+        title: const Text('Explore'),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: auctionService.streamActiveAuctions(),
@@ -79,26 +79,89 @@ class ExplorePage extends StatelessWidget {
               }
 
               return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  title: Text(title),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Brand: $brand'),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Current: ${currentPrice.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text('Time left: $timeLeft'),
-                    ],
-                  ),
+                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: InkWell(
                   onTap: () {
                     Navigator.of(context).pushNamed(
                       '/auctionDetail?auctionId=$auctionId',
                     );
                   },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Image placeholder
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: AppTheme.backgroundGrey,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(
+                            Icons.image_outlined,
+                            color: AppTheme.textTertiary,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        // Content
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                brand,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Text(
+                                    'AED ${currentPrice.toStringAsFixed(0)}',
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          color: AppTheme.primaryBlue,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                  ),
+                                  const Spacer(),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.access_time,
+                                        size: 14,
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        timeLeft,
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             },

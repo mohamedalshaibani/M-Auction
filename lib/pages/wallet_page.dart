@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
+import '../theme/app_theme.dart';
 import 'payment_page.dart';
 
 class WalletPage extends StatefulWidget {
@@ -14,7 +15,6 @@ class WalletPage extends StatefulWidget {
 class _WalletPageState extends State<WalletPage> {
   final FirestoreService _firestoreService = FirestoreService();
   final _amountController = TextEditingController();
-  bool _isAdding = false;
   String? _error;
 
   @override
@@ -81,26 +81,28 @@ class _WalletPageState extends State<WalletPage> {
           final depositStatus = data?['depositStatus'] as String? ?? 'none';
           final eligibleDeposit = availableDeposit - reservedDeposit;
 
-          return Padding(
-            padding: const EdgeInsets.all(16),
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Available Deposit',
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          availableDeposit.toStringAsFixed(2),
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                color: Colors.green,
+                          'AED ${availableDeposit.toStringAsFixed(2)}',
+                          style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                                color: AppTheme.success,
                                 fontWeight: FontWeight.bold,
                               ),
                         ),
@@ -111,26 +113,29 @@ class _WalletPageState extends State<WalletPage> {
                 const SizedBox(height: 16),
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Reserved Deposit',
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          reservedDeposit.toStringAsFixed(2),
+                          'AED ${reservedDeposit.toStringAsFixed(2)}',
                           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                color: Colors.blue,
+                                color: AppTheme.primaryBlue,
                                 fontWeight: FontWeight.bold,
                               ),
                         ),
+                        const SizedBox(height: 4),
                         Text(
-                          'Eligible: ${eligibleDeposit.toStringAsFixed(2)}',
+                          'Eligible: AED ${eligibleDeposit.toStringAsFixed(2)}',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.grey,
+                                color: AppTheme.textSecondary,
                               ),
                         ),
                       ],
@@ -140,71 +145,105 @@ class _WalletPageState extends State<WalletPage> {
                 const SizedBox(height: 16),
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Locked Deposit',
-                          style: Theme.of(context).textTheme.titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          lockedDeposit.toStringAsFixed(2),
+                          'AED ${lockedDeposit.toStringAsFixed(2)}',
                           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                color: Colors.orange,
+                                color: AppTheme.warning,
                                 fontWeight: FontWeight.bold,
                               ),
                         ),
+                        const SizedBox(height: 4),
                         Text(
-                          'Deposit Status: $depositStatus',
-                          style: Theme.of(context).textTheme.bodySmall,
+                          'Status: $depositStatus',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
                         ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
-                Text(
-                  'Add Deposit',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _amountController,
-                  decoration: const InputDecoration(
-                    labelText: 'Amount (AED)',
-                    border: OutlineInputBorder(),
-                    prefixText: 'AED ',
-                  ),
-                  keyboardType: TextInputType.number,
-                  enabled: !_isAdding,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isAdding
-                        ? null
-                        : () {
-                            final amount = double.tryParse(_amountController.text);
-                            if (amount != null && amount > 0) {
-                              _openPaymentPage(amount);
-                            } else {
-                              setState(() => _error = 'Please enter a valid amount');
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Add Deposit',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _amountController,
+                          decoration: InputDecoration(
+                            labelText: 'Amount (AED)',
+                            prefixText: 'AED ',
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: AppTheme.error.withValues(alpha: 0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: AppTheme.error,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _error!,
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: AppTheme.error,
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                                  final amount = double.tryParse(_amountController.text);
+                                  if (amount != null && amount > 0) {
+                                    _openPaymentPage(amount);
+                                  } else {
+                                    setState(() => _error = 'Please enter a valid amount');
+                                  }
+                                },
+                          child: const Text('Add Deposit via Stripe'),
+                        ),
+                      ],
                     ),
-                    child: const Text('Add Deposit via Stripe'),
                   ),
                 ),
               ],

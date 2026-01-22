@@ -1,301 +1,114 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/firestore_service.dart';
+import '../theme/app_theme.dart';
 
-class HomePage extends StatefulWidget {
+class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  final FirestoreService _firestoreService = FirestoreService();
-
-  Future<void> _signOut(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-    if (context.mounted) {
-      Navigator.of(context).pushReplacementNamed('/authGate');
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _signOut(context),
-            tooltip: 'Sign out',
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Phone Number:',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              user?.phoneNumber ?? 'Not available',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'KYC Status:',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            StreamBuilder<String>(
-              stream: user != null
-                  ? _firestoreService.kycStatusStream(user.uid)
-                  : Stream.value('not_submitted'),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const CircularProgressIndicator();
-                }
-                return Text(
-                  snapshot.data ?? 'not_submitted',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Wallet Balance:',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            StreamBuilder<double>(
-              stream: user != null
-                  ? _firestoreService.walletBalanceStream(user.uid)
-                  : Stream.value(0.0),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const CircularProgressIndicator();
-                }
-                return Text(
-                  '${snapshot.data?.toStringAsFixed(2) ?? '0.00'}',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-            // KYC Status Banner
-            if (user != null)
-              StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user.uid)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const SizedBox.shrink();
-                  final userData = snapshot.data?.data() as Map<String, dynamic>?;
-                  final kycStatus = userData?['kycStatus'] as String? ?? 'not_submitted';
-                  final rejectionReason = userData?['kycRejectionReason'] as String?;
-
-                  Color bannerColor;
-                  String statusText;
-                  IconData statusIcon;
-
-                  if (kycStatus == 'approved') {
-                    bannerColor = Colors.green.shade50;
-                    statusText = 'KYC Verified';
-                    statusIcon = Icons.check_circle;
-                  } else if (kycStatus == 'pending') {
-                    bannerColor = Colors.orange.shade50;
-                    statusText = 'KYC Under Review';
-                    statusIcon = Icons.pending;
-                  } else if (kycStatus == 'rejected') {
-                    bannerColor = Colors.red.shade50;
-                    statusText = 'KYC Rejected';
-                    statusIcon = Icons.error;
-                  } else {
-                    bannerColor = Colors.blue.shade50;
-                    statusText = 'KYC Not Submitted';
-                    statusIcon = Icons.info;
-                  }
-
-                  return Card(
-                    color: bannerColor,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(statusIcon, color: bannerColor == Colors.green.shade50
-                                  ? Colors.green
-                                  : bannerColor == Colors.red.shade50
-                                      ? Colors.red
-                                      : Colors.orange),
-                              const SizedBox(width: 8),
-                              Text(
-                                statusText,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (rejectionReason != null) ...[
-                            const SizedBox(height: 8),
-                            Text('Reason: $rejectionReason'),
-                          ],
-                          if (kycStatus != 'approved') ...[
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  Navigator.of(context).pushNamed('/kyc');
-                                },
-                                child: const Text('Complete Verification'),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            // Top bar with logo and title
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: Row(
+                  children: [
+                    Image.asset(
+                      'assets/branding/logo_light.png',
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.contain,
                     ),
-                  );
-                },
-              ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/explore');
-                },
-                icon: const Icon(Icons.explore),
-                label: const Text('Explore Auctions'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (user != null)
-              StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user.uid)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const SizedBox.shrink();
-                  final userData = snapshot.data?.data() as Map<String, dynamic>?;
-                  final kycStatus = userData?['kycStatus'] as String? ?? 'not_submitted';
-                  final isApproved = kycStatus == 'approved';
-
-                  return SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: isApproved
-                          ? () {
-                              Navigator.of(context).pushNamed('/sellCreateAuction');
-                            }
-                          : () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'KYC verification required to sell items. Please complete verification first.',
-                                  ),
-                                ),
-                              );
-                              Navigator.of(context).pushNamed('/kyc');
-                            },
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('Sell Item'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isApproved ? null : Colors.grey,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/sellerMyAuctions');
-                },
-                icon: const Icon(Icons.list),
-                label: const Text('My Auctions'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/myWins');
-                },
-                icon: const Icon(Icons.emoji_events),
-                label: const Text('My Wins'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/wallet');
-                },
-                icon: const Icon(Icons.account_balance_wallet),
-                label: const Text('Wallet'),
-              ),
-            ),
-            // Show Admin Panel only if user is admin
-            if (user != null)
-              StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SizedBox.shrink();
-                  }
-                  final userData = snapshot.data?.data() as Map<String, dynamic>?;
-                  final role = userData?['role'] as String?;
-                  final isAdmin = role == 'admin';
-                  
-                  if (!isAdmin) {
-                    return const SizedBox.shrink();
-                  }
-                  
-                  return Column(
-                    children: [
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).pushNamed('/adminPanel');
-                          },
-                          icon: const Icon(Icons.admin_panel_settings),
-                          label: const Text('Admin Panel'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
+                    const SizedBox(width: 12),
+                    Text(
+                      'M Auction',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
                           ),
-                        ),
-                      ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Search field
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search auctions...',
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  readOnly: true,
+                  onTap: () {
+                    // Placeholder - search functionality to be implemented
+                  },
+                ),
+              ),
+            ),
+            
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 20),
+            ),
+            
+            // Category chips
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 40,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    _CategoryChip(label: 'All', isSelected: true),
+                    const SizedBox(width: 8),
+                    _CategoryChip(label: 'Bags'),
+                    const SizedBox(width: 8),
+                    _CategoryChip(label: 'Watches'),
+                    const SizedBox(width: 8),
+                    _CategoryChip(label: 'Jewelry'),
+                    const SizedBox(width: 8),
+                    _CategoryChip(label: 'Art'),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 20),
+            ),
+            
+            // Auction cards list
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  return _AuctionCard(
+                    auctionId: 'mock_$index',
+                    title: _mockAuctions[index % _mockAuctions.length]['title']!,
+                    currentPrice: _mockAuctions[index % _mockAuctions.length]['currentPrice']!,
+                    timeLeft: _mockAuctions[index % _mockAuctions.length]['timeLeft']!,
+                    status: _mockAuctions[index % _mockAuctions.length]['status']!,
                   );
                 },
+                childCount: 10, // Show 10 mock auctions
               ),
-            const Spacer(),
-            Center(
-              child: ElevatedButton(
-                onPressed: () => _signOut(context),
-                child: const Text('Sign out'),
-              ),
+            ),
+            
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 20),
             ),
           ],
         ),
@@ -303,3 +116,196 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
+
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+
+  const _CategoryChip({
+    required this.label,
+    this.isSelected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) {
+        // Placeholder - category filtering to be implemented
+      },
+      selectedColor: Theme.of(context).colorScheme.primaryContainer,
+      checkmarkColor: AppTheme.primaryBlue,
+      labelStyle: TextStyle(
+        color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+      ),
+      side: BorderSide(
+        color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
+        width: 1,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+    );
+  }
+}
+
+class _AuctionCard extends StatelessWidget {
+  final String auctionId;
+  final String title;
+  final double currentPrice;
+  final String timeLeft;
+  final String status;
+
+  const _AuctionCard({
+    required this.auctionId,
+    required this.title,
+    required this.currentPrice,
+    required this.timeLeft,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Color statusColor;
+    switch (status) {
+      case 'active':
+        statusColor = AppTheme.success;
+        break;
+      case 'ending_soon':
+        statusColor = AppTheme.warning;
+        break;
+      default:
+        statusColor = AppTheme.textSecondary;
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: InkWell(
+        onTap: () {
+          // Navigate to auction detail (will use real auctionId when available)
+          Navigator.pushNamed(
+            context,
+            '/auctionDetail?auctionId=$auctionId',
+          );
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Image placeholder
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundGrey,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.image_outlined,
+                  color: AppTheme.textTertiary,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text(
+                          'AED ${currentPrice.toStringAsFixed(0)}',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                color: AppTheme.primaryBlue,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: AppTheme.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          timeLeft,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            status.toUpperCase(),
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Mock data
+final List<Map<String, dynamic>> _mockAuctions = [
+  {
+    'title': 'Vintage Hermès Birkin Bag',
+    'currentPrice': 45000.0,
+    'timeLeft': '2d 5h',
+    'status': 'active',
+  },
+  {
+    'title': 'Rolex Submariner Date',
+    'currentPrice': 28000.0,
+    'timeLeft': '1d 12h',
+    'status': 'ending_soon',
+  },
+  {
+    'title': 'Cartier Love Bracelet',
+    'currentPrice': 12000.0,
+    'timeLeft': '5d 3h',
+    'status': 'active',
+  },
+  {
+    'title': 'Chanel Classic Flap Bag',
+    'currentPrice': 8500.0,
+    'timeLeft': '3d 8h',
+    'status': 'active',
+  },
+];

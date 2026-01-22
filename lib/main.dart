@@ -7,7 +7,7 @@ import 'pages/auth_gate.dart';
 import 'pages/login_phone_page.dart';
 import 'pages/verify_otp_page.dart';
 import 'pages/create_profile_page.dart';
-import 'pages/home_page.dart';
+import 'pages/main_shell.dart';
 import 'pages/explore_page.dart';
 import 'pages/sell_create_auction_page.dart';
 import 'pages/seller_my_auctions_page.dart';
@@ -56,7 +56,7 @@ class MyApp extends StatelessWidget {
               phoneNumber: '',
             ),
         '/createProfile': (context) => const CreateProfilePage(),
-        '/home': (context) => const HomePage(),
+        '/home': (context) => const MainShell(),
         '/explore': (context) => const ExplorePage(),
         '/sellCreateAuction': (context) => const SellCreateAuctionPage(),
         '/sellerMyAuctions': (context) => const SellerMyAuctionsPage(),
