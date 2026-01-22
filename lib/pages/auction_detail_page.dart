@@ -419,21 +419,39 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
       builder: (context, auctionSnapshot) {
         if (auctionSnapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Auction Details')),
+            appBar: AppBar(
+              title: const Text('Auction Details'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
             body: Center(child: Text('Error: ${auctionSnapshot.error}')),
           );
         }
 
         if (auctionSnapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Auction Details')),
+            appBar: AppBar(
+              title: const Text('Auction Details'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
             body: const Center(child: CircularProgressIndicator()),
           );
         }
 
         if (!auctionSnapshot.hasData || !auctionSnapshot.data!.exists) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Auction Details')),
+            appBar: AppBar(
+              title: const Text('Auction Details'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
             body: const Center(child: Text('Auction not found')),
           );
         }
@@ -449,13 +467,20 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         final isWinner = user?.uid == winnerId;
         final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
 
+        // Dynamic title: prefer itemNumber or auctionNumber, else title, else shortId
+        final itemNumber = (data['itemNumber'] as String?)?.trim();
+        final auctionNumber = (data['auctionNumber'] as String?)?.trim();
         final title = (data['title'] as String?)?.trim();
-        final itemIdentifier = (data['itemIdentifier'] as String?)?.trim();
         final shortId =
             widget.auctionId.length > 6 ? widget.auctionId.substring(0, 6) : widget.auctionId;
-        final appBarTitle = (title != null && title.isNotEmpty)
-            ? title
-            : 'Auction ${((itemIdentifier != null && itemIdentifier.isNotEmpty) ? itemIdentifier : shortId)}';
+        
+        final appBarTitle = (itemNumber != null && itemNumber.isNotEmpty)
+            ? itemNumber
+            : (auctionNumber != null && auctionNumber.isNotEmpty)
+                ? auctionNumber
+                : (title != null && title.isNotEmpty)
+                    ? title
+                    : shortId;
 
           // Check deposit requirement for active auctions (recheck when price changes)
           if (isActive && user != null && !isSeller) {
@@ -476,6 +501,10 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         return Scaffold(
           appBar: AppBar(
             title: Text(appBarTitle),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
