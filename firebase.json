@@ -1,0 +1,63 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ],
+      "predeploy": []
+    }
+  ],
+  "firestore": {
+    "database": "(default)",
+    "location": "eur3",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "luxuryauction-e9c56",
+          "appId": "1:57456317138:android:0fd293e40d4ffb030b930b",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "luxuryauction-e9c56",
+          "appId": "1:57456317138:ios:f3f972839887a0040b930b",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "luxuryauction-e9c56",
+          "appId": "1:57456317138:ios:f3f972839887a0040b930b",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "luxuryauction-e9c56",
+          "configurations": {
+            "android": "1:57456317138:android:0fd293e40d4ffb030b930b",
+            "ios": "1:57456317138:ios:f3f972839887a0040b930b",
+            "macos": "1:57456317138:ios:f3f972839887a0040b930b",
+            "web": "1:57456317138:web:652fff4997a2284b0b930b",
+            "windows": "1:57456317138:web:ecba537ec862dec00b930b"
+          }
+        }
+      }
+    }
+  }
+}

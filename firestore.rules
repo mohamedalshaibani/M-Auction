@@ -1,0 +1,209 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Helper function to check if user is owner
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{uid} {
+      // Users can read their own user doc
+      allow read: if isOwner(uid);
+      
+      // Users can create their own user doc (during registration)
+      allow create: if isOwner(uid) && 
+                      request.resource.data.keys().hasAll(['displayName', 'phoneNumber', 'role', 'kycStatus', 'vipDepositWaived', 'createdAt']) &&
+                      request.resource.data.role == 'user' &&
+                      request.resource.data.vipDepositWaived == false &&
+                      request.resource.data.kycStatus == 'not_submitted';
+      
+      // Users can update only their own doc, with restrictions
+      allow update: if isOwner(uid) && (
+        // User can update displayName, kycStatus (to pending only on submit), kycSubmittedAt
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'vipDepositWaived', 'strikeCount', 'kycRejectionReason']) ||
+         // Admin can update role, vipDepositWaived, strikeCount, kycStatus, kycRejectionReason
+         isAdmin()) &&
+        // User can only set kycStatus to 'pending' on submit, not to approved/rejected
+        (!('kycStatus' in request.resource.data.diff(resource.data).affectedKeys()) ||
+         request.resource.data.kycStatus == 'pending' ||
+         isAdmin())
+      );
+    }
+    
+    // KYC Requests collection
+    match /kycRequests/{uid} {
+      // Users can read their own KYC request
+      allow read: if isOwner(uid) || isAdmin();
+      
+      // Users can create/update their own KYC request when status is pending/not yet reviewed
+      allow create, update: if isOwner(uid) && (
+        // Cannot set status to approved/rejected
+        !('status' in request.resource.data) ||
+        request.resource.data.status == 'pending'
+      ) &&
+      // Cannot write reviewedBy/reviewedAt/rejectionReason (admin only)
+      (!('reviewedBy' in request.resource.data) && 
+       !('reviewedAt' in request.resource.data) &&
+       !('rejectionReason' in request.resource.data));
+      
+      // Admin can review (approve/reject) and write reviewedBy/reviewedAt/rejectionReason
+      allow update: if isAdmin() && (
+        // Admin can change status, write reviewedBy, reviewedAt, rejectionReason
+        'status' in request.resource.data.diff(resource.data).affectedKeys() ||
+        'reviewedBy' in request.resource.data.diff(resource.data).affectedKeys() ||
+        'reviewedAt' in request.resource.data.diff(resource.data).affectedKeys() ||
+        'rejectionReason' in request.resource.data.diff(resource.data).affectedKeys()
+      );
+    }
+    
+    // Wallets collection
+    match /wallets/{uid} {
+      // Users can read their own wallet
+      allow read: if isOwner(uid);
+      
+      // Writes only through server/admin functions
+      allow write: if false; // Block all client writes - use Cloud Functions or admin SDK
+    }
+    
+    // Auctions collection
+    match /auctions/{auctionId} {
+      // Anyone authenticated can read ACTIVE and ENDED auctions
+      allow read: if request.auth != null && 
+                    (resource.data.state == 'ACTIVE' || resource.data.state == 'ENDED' || 
+                     // Seller can read their own auctions regardless of state
+                     resource.data.sellerId == request.auth.uid);
+      
+      // Create: Only seller can create DRAFT auctions, and sellerId must match auth.uid
+      allow create: if request.auth != null &&
+                      request.resource.data.sellerId == request.auth.uid &&
+                      request.resource.data.state == 'DRAFT';
+      
+      // Update: Complex rules
+      allow update: if request.auth != null && (
+        // Seller can update their own DRAFT auctions (but not state transitions)
+        (resource.data.sellerId == request.auth.uid && 
+         resource.data.state == 'DRAFT' &&
+         request.resource.data.state == 'DRAFT' &&
+         request.resource.data.sellerId == resource.data.sellerId &&
+         request.resource.data.state == 'DRAFT') ||
+        // Admin can approve/activate and change state
+        isAdmin() ||
+        // Seller can update delivery confirmation
+        (resource.data.sellerId == request.auth.uid && 
+         resource.data.state == 'ENDED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sellerConfirmedDelivery'])) ||
+        // Winner can update purchase confirmation and delivery confirmation
+        (resource.data.currentWinnerId == request.auth.uid && 
+         resource.data.state == 'ENDED' &&
+         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buyerConfirmedPurchase', 'purchaseConfirmedAt']) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buyerConfirmedDelivery']) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buyerConfirmedPurchase', 'purchaseConfirmedAt', 'buyerConfirmedDelivery']))) ||
+        // Admin can force release contact
+        (isAdmin() && 
+         resource.data.state == 'ENDED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['winnerContactReleased']))
+      );
+      
+      // Bids subcollection
+      match /bids/{bidId} {
+        // Anyone authenticated can read bids for ACTIVE/ENDED auctions
+        allow read: if request.auth != null && 
+                      (get(/databases/$(database)/documents/auctions/$(auctionId)).data.state == 'ACTIVE' ||
+                       get(/databases/$(database)/documents/auctions/$(auctionId)).data.state == 'ENDED');
+        
+        // Create bid: strict rules
+        allow create: if request.auth != null &&
+                        request.auth.uid == request.resource.data.bidderId &&
+                        // Auction must be ACTIVE
+                        get(/databases/$(database)/documents/auctions/$(auctionId)).data.state == 'ACTIVE' &&
+                        // Bidder cannot be seller
+                        get(/databases/$(database)/documents/auctions/$(auctionId)).data.sellerId != request.auth.uid &&
+                        // Amount must be >= currentPrice + minIncrement
+                        request.resource.data.amount >= 
+                          (get(/databases/$(database)/documents/auctions/$(auctionId)).data.currentPrice + 
+                           get(/databases/$(database)/documents/auctions/$(auctionId)).data.minIncrement);
+        
+        // No updates or deletes
+        allow update, delete: if false;
+      }
+    }
+    
+    // AdminSettings collection
+    match /adminSettings/{docId} {
+      // Read allowed for authenticated users
+      allow read: if request.auth != null;
+      
+      // Write only by admins
+      allow write: if isAdmin();
+    }
+    
+    // Deposits collection
+    match /deposits/{uid} {
+      // Users can read their own deposit doc
+      allow read: if isOwner(uid);
+      
+      // Writes controlled - MVP allows some controlled fields
+      allow create, update: if isOwner(uid) && 
+                              // Only allow status and lastActionAt updates
+                              (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastActionAt', 'amount', 'note']) ||
+                               isAdmin());
+    }
+    
+    // Reservations collection
+    match /reservations/{uid}/active/{auctionId} {
+      // Users can read their own reservations
+      allow read: if isOwner(uid);
+      
+      // Create/update reservation allowed during bidding (server logic)
+      // For MVP, allow controlled writes
+      allow write: if isOwner(uid) && 
+                     request.resource.data.keys().hasAll(['requiredDeposit', 'lastBidAmount', 'updatedAt']) ||
+                     isAdmin();
+      
+      // Delete allowed (release reservation)
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+    
+    // Contracts collection
+    match /contracts/{auctionId} {
+      // Seller and buyer can read their contract
+      allow read: if request.auth != null && 
+                    (resource.data.sellerId == request.auth.uid || 
+                     resource.data.buyerId == request.auth.uid ||
+                     isAdmin());
+      
+      // Create allowed by server/admin only
+      allow create: if isAdmin();
+      
+      // Update: allow controlled field updates (terms acceptance)
+      allow update: if request.auth != null && (
+        // Seller can accept their terms
+        (resource.data.sellerId == request.auth.uid && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['termsAcceptedSeller', 'acceptedAtSeller'])) ||
+        // Buyer can accept their terms
+        (resource.data.buyerId == request.auth.uid && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['termsAcceptedBuyer', 'acceptedAtBuyer'])) ||
+        // Admin can update anything
+        isAdmin()
+      );
+    }
+    
+    // Payments collection - writable by backend only (via Cloud Functions)
+    match /payments/{paymentId} {
+      // Users can read their own payments
+      allow read: if isOwner(resource.data.uid);
+      
+      // Writes only by backend (Cloud Functions) - block all client writes
+      allow write: if false;
+    }
+  }
+}

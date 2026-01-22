@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is owner
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // KYC uploads - user can only upload to their own kyc/{uid} path
+    match /kyc/{userId}/{allPaths=**} {
+      // Read: authenticated users can read
+      allow read: if isAuthenticated();
+      
+      // Write: only owner can upload to their own path
+      // Check authentication first, then ownership, then file constraints
+      allow write: if request.auth != null &&
+                     request.auth.uid == userId &&
+                     // File size limit: 10MB
+                     request.resource.size < 10 * 1024 * 1024 &&
+                     // Only allow image mime types
+                     request.resource.contentType.matches('image/.*');
+      
+      // Delete: only owner
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // User uploads path
+    match /user_uploads/{userId}/{allPaths=**} {
+      // Read: authenticated users can read
+      allow read: if isAuthenticated();
+      
+      // Write: only owner can upload to their own path
+      allow write: if isOwner(userId) &&
+                     // File size limit: 10MB
+                     request.resource.size < 10 * 1024 * 1024 &&
+                     // Only allow image mime types
+                     request.resource.contentType.matches('image/.*');
+      
+      // Delete: only owner or admin
+      allow delete: if isOwner(userId);
+    }
+    
+    // Auction images path (blocked for client writes)
+    match /auction_images/{auctionId}/{allPaths=**} {
+      // Read: authenticated users
+      allow read: if isAuthenticated();
+      
+      // Write: blocked - use Cloud Functions or admin SDK
+      allow write: if false;
+    }
+  }
+}

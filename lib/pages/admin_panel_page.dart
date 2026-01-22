@@ -1,0 +1,828 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/auction_service.dart';
+import '../services/admin_settings_service.dart';
+import '../services/firestore_service.dart';
+import '../services/kyc_service.dart';
+import '../services/payment_service.dart';
+import 'auction_detail_page.dart';
+
+class AdminPanelPage extends StatefulWidget {
+  const AdminPanelPage({super.key});
+
+  @override
+  State<AdminPanelPage> createState() => _AdminPanelPageState();
+}
+
+class _AdminPanelPageState extends State<AdminPanelPage>
+    with SingleTickerProviderStateMixin {
+  final AuctionService _auctionService = AuctionService();
+  final AdminSettingsService _adminSettings = AdminSettingsService();
+  final FirestoreService _firestoreService = FirestoreService();
+  final KycService _kycService = KycService();
+  final PaymentService _paymentService = PaymentService();
+  final Map<String, int> _selectedDurations = {};
+  bool _isApproving = false;
+  bool _isProcessingPayment = false;
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+  }
+
+  Future<bool> _checkAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+    
+    final userDoc = await _firestoreService.getUser(user.uid);
+    if (!userDoc.exists) return false;
+    
+    final userData = userDoc.data() as Map<String, dynamic>?;
+    final role = userData?['role'] as String?;
+    return role == 'admin';
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _approveAndActivate(String auctionId) async {
+    final durationDays = _selectedDurations[auctionId];
+    if (durationDays == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select duration')),
+      );
+      return;
+    }
+
+    setState(() => _isApproving = true);
+
+    try {
+      await _auctionService.adminApprove(auctionId, durationDays);
+      await _auctionService.markPaidAndActivate(auctionId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Auction approved and activated')),
+        );
+        setState(() => _selectedDurations.remove(auctionId));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isApproving = false);
+      }
+    }
+  }
+
+  Future<void> _toggleVipWaiver(String uid, bool currentValue) async {
+    await FirebaseFirestore.instance.collection('users').doc(uid).update({
+      'vipDepositWaived': !currentValue,
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            !currentValue
+                ? 'VIP deposit waiver enabled'
+                : 'VIP deposit waiver disabled',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _forceRefund(String uid) async {
+    // Note: For full refund functionality, auctionId is needed
+    // This method can be enhanced to find auction from user's locked deposits
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Refund/Forfeit available from auction detail page'),
+      ),
+    );
+  }
+
+  Future<void> _forceForfeit(String uid) async {
+    // Note: For full forfeit functionality, auctionId is needed
+    // This method can be enhanced to find auction from user's locked deposits
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Refund/Forfeit available from auction detail page'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    
+    return FutureBuilder<bool>(
+      future: _checkAdmin(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        
+        final isAdmin = snapshot.data ?? false;
+        
+        if (!isAdmin || user == null) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Admin Panel'),
+            ),
+            body: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.block, size: 64, color: Colors.red),
+                  SizedBox(height: 16),
+                  Text(
+                    'Not Authorized',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text('You do not have admin privileges.'),
+                ],
+              ),
+            ),
+          );
+        }
+        
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Admin Panel'),
+            bottom: TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(text: 'Auctions'),
+                Tab(text: 'Deposits'),
+                Tab(text: 'KYC Requests'),
+                Tab(text: 'Revenue'),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildAuctionsTab(),
+              _buildDepositsTab(),
+              _buildKycTab(),
+              _buildRevenueTab(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAuctionsTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _auctionService.streamPendingApprovalAuctions(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Text('Error: ${snapshot.error}'),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(
+            child: Text('No auctions pending approval'),
+          );
+        }
+
+        // Sort by createdAt (descending - newest first)
+        final sortedDocs = List<QueryDocumentSnapshot>.from(
+          snapshot.data!.docs,
+        )..sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTimestamp = aData['createdAt'] as Timestamp?;
+            final bTimestamp = bData['createdAt'] as Timestamp?;
+
+            if (aTimestamp == null && bTimestamp == null) return 0;
+            if (aTimestamp == null) return 1;
+            if (bTimestamp == null) return -1;
+
+            return bTimestamp.compareTo(aTimestamp); // Descending
+          });
+
+        return ListView.builder(
+          itemCount: sortedDocs.length,
+          itemBuilder: (context, index) {
+            final doc = sortedDocs[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final auctionId = doc.id;
+
+            final title = data['title'] as String? ?? 'Untitled';
+            final brand = data['brand'] as String? ?? 'Unknown';
+
+            return Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text('Brand: $brand'),
+                    const SizedBox(height: 16),
+                    FutureBuilder<List<int>>(
+                      future: _adminSettings.getDurationOptions(),
+                      builder: (context, durationSnapshot) {
+                        if (!durationSnapshot.hasData) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final durations = durationSnapshot.data!;
+                        final currentDuration = _selectedDurations[auctionId];
+
+                        return DropdownButtonFormField<int>(
+                          value: currentDuration,
+                          decoration: const InputDecoration(
+                            labelText: 'Duration (days)',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: durations
+                              .map((days) => DropdownMenuItem(
+                                    value: days,
+                                    child: Text('$days days'),
+                                  ))
+                              .toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value != null) {
+                                _selectedDurations[auctionId] = value;
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              Navigator.of(context).pushNamed(
+                                '/auctionDetail?auctionId=$auctionId',
+                              );
+                            },
+                            child: const Text('View Details'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: (_isApproving ||
+                                    _selectedDurations[auctionId] == null)
+                                ? null
+                                : () => _approveAndActivate(auctionId),
+                            child: _isApproving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Approve & Activate'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDepositsTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('deposits').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No deposits found'));
+        }
+
+        return ListView.builder(
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final doc = snapshot.data!.docs[index];
+            final uid = doc.id;
+            final data = doc.data() as Map<String, dynamic>;
+            final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+            final status = data['status'] as String? ?? 'unknown';
+
+            return FutureBuilder<DocumentSnapshot>(
+              future: _firestoreService.getUser(uid),
+              builder: (context, userSnapshot) {
+                final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
+                final userName = userData?['displayName'] as String? ??
+                    userData?['phoneNumber'] as String? ??
+                    uid;
+                final vipWaived =
+                    userData?['vipDepositWaived'] as bool? ?? false;
+
+                return FutureBuilder<DocumentSnapshot>(
+                  future: _firestoreService.getWallet(uid),
+                  builder: (context, walletSnapshot) {
+                    final walletData = walletSnapshot.data?.data() as Map<String, dynamic>?;
+                    final availableDeposit =
+                        (walletData?['availableDeposit'] as num?)?.toDouble() ?? 0.0;
+                    final lockedDeposit =
+                        (walletData?['lockedDeposit'] as num?)?.toDouble() ?? 0.0;
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              userName,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 4),
+                            Text('User ID: $uid'),
+                            const SizedBox(height: 8),
+                            Text('Total Deposit: ${amount.toStringAsFixed(2)}'),
+                            Text('Status: $status'),
+                            Text('Available: ${availableDeposit.toStringAsFixed(2)}'),
+                            Text('Locked: ${lockedDeposit.toStringAsFixed(2)}'),
+                            if (vipWaived) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'VIP Deposit Waived',
+                                  style: TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () => _toggleVipWaiver(uid, vipWaived),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: vipWaived ? Colors.orange : Colors.green,
+                                  ),
+                                  child: Text(vipWaived ? 'Remove VIP' : 'Grant VIP'),
+                                ),
+                                if (lockedDeposit > 0) ...[
+                                  OutlinedButton(
+                                    onPressed: () => _forceRefund(uid),
+                                    child: const Text('Force Refund'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: () => _forceForfeit(uid),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.red,
+                                    ),
+                                    child: const Text('Force Forfeit'),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildKycTab() {
+    final user = FirebaseAuth.instance.currentUser;
+    return StreamBuilder<QuerySnapshot>(
+      stream: _kycService.streamPendingKycRequests(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No pending KYC requests'));
+        }
+
+        final requests = snapshot.data!.docs;
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: requests.length,
+          itemBuilder: (context, index) {
+            final doc = requests[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final uid = doc.id;
+            final fullName = data['fullName'] as String? ?? 'N/A';
+            final nationality = data['nationality'] as String? ?? 'N/A';
+            final idType = data['idType'] as String? ?? 'N/A';
+            final idNumber = data['idNumber'] as String? ?? 'N/A';
+            final proofType = data['proofType'] as String? ?? 'N/A';
+            final idFrontUrl = data['idFrontUrl'] as String?;
+            final idBackUrl = data['idBackUrl'] as String?;
+            final selfieUrl = data['selfieUrl'] as String?;
+            final proofUrl = data['proofUrl'] as String?;
+            final proofNote = data['proofNote'] as String?;
+
+            final rejectController = TextEditingController();
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ExpansionTile(
+                title: Text(fullName),
+                subtitle: Text('ID: $idNumber | Proof: $proofType'),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Full Name: $fullName'),
+                        Text('Nationality: $nationality'),
+                        Text('ID Type: $idType'),
+                        Text('ID Number: $idNumber'),
+                        Text('Proof Type: $proofType'),
+                        if (proofNote != null) Text('Proof Note: $proofNote'),
+                        const SizedBox(height: 16),
+                        if (idFrontUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('ID Front:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                GestureDetector(
+                                  onTap: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => Dialog(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            AppBar(title: const Text('ID Front')),
+                                            Image.network(idFrontUrl, fit: BoxFit.contain),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Image.network(
+                                    idFrontUrl,
+                                    height: 150,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (idBackUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('ID Back:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                GestureDetector(
+                                  onTap: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => Dialog(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            AppBar(title: const Text('ID Back')),
+                                            Image.network(idBackUrl, fit: BoxFit.contain),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Image.network(
+                                    idBackUrl,
+                                    height: 150,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (selfieUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Selfie:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                GestureDetector(
+                                  onTap: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => Dialog(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            AppBar(title: const Text('Selfie')),
+                                            Image.network(selfieUrl, fit: BoxFit.contain),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Image.network(
+                                    selfieUrl,
+                                    height: 150,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (proofUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Proof:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                GestureDetector(
+                                  onTap: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => Dialog(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            AppBar(title: const Text('Proof')),
+                                            Image.network(proofUrl, fit: BoxFit.contain),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Image.network(
+                                    proofUrl,
+                                    height: 150,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  if (user == null) return;
+                                  try {
+                                    await _kycService.approveKyc(uid, user.uid);
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('KYC approved')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Error: $e')),
+                                      );
+                                    }
+                                  }
+                                },
+                                icon: const Icon(Icons.check),
+                                label: const Text('Approve'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('Reject KYC'),
+                                      content: TextField(
+                                        controller: rejectController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Rejection Reason',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        maxLines: 3,
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.of(context).pop(),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () async {
+                                            if (rejectController.text.trim().isEmpty) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('Please provide a rejection reason'),
+                                                ),
+                                              );
+                                              return;
+                                            }
+                                            if (user == null) return;
+                                            try {
+                                              await _kycService.rejectKyc(
+                                                uid,
+                                                rejectController.text.trim(),
+                                                user.uid,
+                                              );
+                                              if (mounted) {
+                                                Navigator.of(context).pop();
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('KYC rejected')),
+                                                );
+                                              }
+                                            } catch (e) {
+                                              if (mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(content: Text('Error: $e')),
+                                                );
+                                              }
+                                            }
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red,
+                                          ),
+                                          child: const Text('Reject'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.close),
+                                label: const Text('Reject'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRevenueTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('platformRevenue')
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No revenue records found'));
+        }
+
+        final records = snapshot.data!.docs;
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: records.length,
+          itemBuilder: (context, index) {
+            final doc = records[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final auctionId = data['auctionId'] as String? ?? 'N/A';
+            final type = data['type'] as String? ?? 'unknown';
+            final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+            final uid = data['uid'] as String? ?? 'N/A';
+            final createdAt = data['createdAt'] as Timestamp?;
+            
+            String dateText = 'N/A';
+            if (createdAt != null) {
+              final date = createdAt.toDate();
+              dateText = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+            }
+
+            // Format type for display
+            String typeDisplay = type;
+            if (type == 'buyer_commission') {
+              typeDisplay = 'Buyer Commission';
+            } else if (type == 'seller_commission') {
+              typeDisplay = 'Seller Commission';
+            } else if (type == 'forfeit') {
+              typeDisplay = 'Forfeit';
+            }
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          typeDisplay,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'AED ${amount.toStringAsFixed(2)}',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text('Auction ID: ${auctionId.length > 20 ? auctionId.substring(0, 20) + '...' : auctionId}'),
+                    Text('User ID: ${uid.length > 20 ? uid.substring(0, 20) + '...' : uid}'),
+                    Text('Date: $dateText'),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}

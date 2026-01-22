@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "57456317138",
+    "project_id": "luxuryauction-e9c56",
+    "storage_bucket": "luxuryauction-e9c56.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:57456317138:android:0fd293e40d4ffb030b930b",
+        "android_client_info": {
+          "package_name": "com.example.luxury_auction_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCt9B_Al-73obnLEHE6XVxYI_gCXbImN0I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:57456317138:android:2a154913f8228ea10b930b",
+        "android_client_info": {
+          "package_name": "com.luxury.auction"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCt9B_Al-73obnLEHE6XVxYI_gCXbImN0I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:57456317138:android:fda2e32d74971c140b930b",
+        "android_client_info": {
+          "package_name": "com.mycompany.luxuryauction"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCt9B_Al-73obnLEHE6XVxYI_gCXbImN0I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
