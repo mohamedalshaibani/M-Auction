@@ -62,6 +62,7 @@ class AuctionService {
   Future<void> submitForApproval(String auctionId) async {
     await _firestore.collection('auctions').doc(auctionId).update({
       'state': 'PENDING_APPROVAL',
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -69,6 +70,7 @@ class AuctionService {
   Future<void> adminApprove(String auctionId, int durationDays) async {
     final auctionRef = _firestore.collection('auctions').doc(auctionId);
     final auctionDoc = await auctionRef.get();
+    if (!auctionDoc.exists) throw Exception('Auction not found');
     final auctionData = auctionDoc.data();
     if (auctionData == null) throw Exception('Auction not found');
 
