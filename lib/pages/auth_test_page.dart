@@ -16,7 +16,8 @@ class _AuthTestPageState extends State<AuthTestPage> {
   String? _verificationId;
   String _status = '';
   
-  // Dev mode flag for simulator builds
+  // Dev mode flag for simulator builds - DEBUG-only, cannot be enabled in release
+  // kDebugMode is a compile-time constant that is false in release builds
   static const bool kDevBypassOtp = kDebugMode;
 
   @override

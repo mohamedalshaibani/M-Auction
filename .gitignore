@@ -23,5 +23,3 @@ android/local.properties
 .idea/
 *.iml
 
-# Node lockfile (we don't use npm here)
-package-lock.json
