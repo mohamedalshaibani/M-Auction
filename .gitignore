@@ -10,6 +10,7 @@ package.json
 # Flutter/Dart
 .dart_tool/
 build/
+.flutter-plugins-dependencies
 ios/Pods/
 ios/.symlinks/
 ios/Flutter/ephemeral/
