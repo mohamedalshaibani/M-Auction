@@ -21,3 +21,33 @@ package-lock.json
 .vscode/
 *.iml
 .DS_Store
+
+# Dependencies
+node_modules/
+
+# Flutter/Dart
+.dart_tool/
+build/
+.pub/
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework/
+ios/Flutter/App.framework/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Android
+android/.gradle/
+android/app/build/
+
+# macOS
+macos/Pods/
+
+# Logs
+*.log
