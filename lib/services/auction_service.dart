@@ -86,6 +86,7 @@ class AuctionService {
       'state': 'APPROVED_AWAITING_PAYMENT',
       'endsAt': Timestamp.fromDate(endsAt),
       'listingFeeAmount': listingFee,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -108,6 +109,7 @@ class AuctionService {
     await _firestore.collection('auctions').doc(auctionId).update({
       'state': 'ACTIVE',
       'activatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
