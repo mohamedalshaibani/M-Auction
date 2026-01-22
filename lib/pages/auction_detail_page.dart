@@ -462,7 +462,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         final winnerId = data['currentWinnerId'] as String?;
         final state = data['state'] as String? ?? 'UNKNOWN';
         final isActive = state == 'ACTIVE';
-        final isEnded = state == 'ENDED';
+        final isEnded = state == 'ENDED' || state == 'ENDED_NO_RESPONSE';
         final isSeller = user?.uid == sellerId;
         final isWinner = user?.uid == winnerId;
         final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
