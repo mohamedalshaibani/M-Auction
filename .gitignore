@@ -15,3 +15,10 @@ android/local.properties
 
 # Mac
 .DS_Store
+
+# IDE
+.idea/
+*.iml
+
+# Node lockfile (we don't use npm here)
+package-lock.json
