@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'theme/app_theme.dart';
 import 'pages/auth_gate.dart';
 import 'pages/auth_test_page.dart';
 import 'pages/create_profile_page.dart';
@@ -12,7 +13,6 @@ import 'pages/auction_detail_page.dart';
 import 'pages/admin_panel_page.dart';
 import 'pages/wallet_page.dart';
 import 'pages/kyc_page.dart';
-import 'pages/terms_contract_page.dart';
 import 'pages/my_won_auctions_page.dart';
 import 'services/payment_service.dart';
 
@@ -43,6 +43,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
       initialRoute: '/authGate',
       routes: {
         '/authGate': (context) => const AuthGate(),
