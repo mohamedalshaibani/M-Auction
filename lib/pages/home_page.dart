@@ -1,8 +1,77 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../services/auction_service.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final _searchController = TextEditingController();
+  final _auctionService = AuctionService();
+  String _selectedCategory = 'All';
+  
+  // Available categories (can be extracted from Firestore if needed)
+  final List<String> _categories = ['All', 'Bags', 'Watches', 'Jewelry', 'Art'];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  String _formatTimeLeft(Timestamp? endsAt) {
+    if (endsAt == null) return 'No end date';
+    
+    final now = DateTime.now();
+    final endDate = endsAt.toDate();
+    final difference = endDate.difference(now);
+
+    if (difference.isNegative) {
+      return 'Ended';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ${difference.inHours % 24}h';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ${difference.inMinutes % 60}m';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m';
+    } else {
+      return 'Ending soon';
+    }
+  }
+
+  String _getStatusBadge(String state, Timestamp? endsAt) {
+    if (state != 'ACTIVE') return state.toLowerCase();
+    
+    if (endsAt == null) return 'active';
+    
+    final now = DateTime.now();
+    final endDate = endsAt.toDate();
+    final difference = endDate.difference(now);
+    
+    if (difference.isNegative) {
+      return 'ended';
+    } else if (difference.inHours < 24) {
+      return 'ending_soon';
+    } else {
+      return 'active';
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'active':
+        return AppTheme.success;
+      case 'ending_soon':
+        return AppTheme.warning;
+      default:
+        return AppTheme.textSecondary;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +108,7 @@ class HomePage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: TextField(
+                  controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Search auctions...',
                     prefixIcon: const Icon(Icons.search),
@@ -53,9 +123,8 @@ class HomePage extends StatelessWidget {
                       vertical: 12,
                     ),
                   ),
-                  readOnly: true,
-                  onTap: () {
-                    // Placeholder - search functionality to be implemented
+                  onChanged: (_) {
+                    setState(() {}); // Trigger rebuild for search filtering
                   },
                 ),
               ),
@@ -72,17 +141,34 @@ class HomePage extends StatelessWidget {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  children: [
-                    _CategoryChip(label: 'All', isSelected: true),
-                    const SizedBox(width: 8),
-                    _CategoryChip(label: 'Bags'),
-                    const SizedBox(width: 8),
-                    _CategoryChip(label: 'Watches'),
-                    const SizedBox(width: 8),
-                    _CategoryChip(label: 'Jewelry'),
-                    const SizedBox(width: 8),
-                    _CategoryChip(label: 'Art'),
-                  ],
+                  children: _categories.map((category) {
+                    final isSelected = category == _selectedCategory;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(category),
+                        selected: isSelected,
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedCategory = category;
+                          });
+                        },
+                        selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                        checkmarkColor: AppTheme.primaryBlue,
+                        labelStyle: TextStyle(
+                          color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        side: BorderSide(
+                          color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
+                          width: 1,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
               ),
             ),
@@ -91,20 +177,114 @@ class HomePage extends StatelessWidget {
               child: SizedBox(height: 20),
             ),
             
-            // Auction cards list
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  return _AuctionCard(
-                    auctionId: 'mock_$index',
-                    title: _mockAuctions[index % _mockAuctions.length]['title']!,
-                    currentPrice: _mockAuctions[index % _mockAuctions.length]['currentPrice']!,
-                    timeLeft: _mockAuctions[index % _mockAuctions.length]['timeLeft']!,
-                    status: _mockAuctions[index % _mockAuctions.length]['status']!,
-                  );
-                },
-                childCount: 10, // Show 10 mock auctions
+            // Auction cards list from Firestore
+            StreamBuilder<QuerySnapshot>(
+              stream: _auctionService.streamActiveAuctionsFiltered(
+                category: _selectedCategory == 'All' ? null : _selectedCategory,
+                limit: 50,
               ),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Center(
+                        child: Text(
+                          'Error loading auctions: ${snapshot.error}',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: AppTheme.error,
+                              ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(40),
+                      child: Center(
+                        child: Text(
+                          'No active auctions available',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                // Apply search filter locally
+                final searchQuery = _searchController.text.trim().toLowerCase();
+                final filteredDocs = snapshot.data!.docs.where((doc) {
+                  if (searchQuery.isEmpty) return true;
+                  
+                  final data = doc.data() as Map<String, dynamic>;
+                  final title = (data['title'] as String? ?? '').toLowerCase();
+                  return title.contains(searchQuery);
+                }).toList();
+
+                if (filteredDocs.isEmpty) {
+                  return SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(40),
+                      child: Center(
+                        child: Text(
+                          'No auctions match your search',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                return SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final doc = filteredDocs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final auctionId = doc.id;
+                      
+                      // Extract fields with null-safety
+                      final title = data['title'] as String? ?? 'Untitled Auction';
+                      final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
+                      final endsAt = data['endsAt'] as Timestamp?;
+                      final state = data['state'] as String? ?? 'UNKNOWN';
+                      final images = data['images'] as List<dynamic>?;
+                      final imageUrl = images != null && images.isNotEmpty
+                          ? images[0] as String?
+                          : null;
+                      
+                      final timeLeft = _formatTimeLeft(endsAt);
+                      final status = _getStatusBadge(state, endsAt);
+                      
+                      return _AuctionCard(
+                        auctionId: auctionId,
+                        title: title,
+                        currentPrice: currentPrice,
+                        timeLeft: timeLeft,
+                        status: status,
+                        imageUrl: imageUrl,
+                        statusColor: _getStatusColor(status),
+                      );
+                    },
+                    childCount: filteredDocs.length,
+                  ),
+                );
+              },
             ),
             
             const SliverToBoxAdapter(
@@ -117,46 +297,14 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class _CategoryChip extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-
-  const _CategoryChip({
-    required this.label,
-    this.isSelected = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (_) {
-        // Placeholder - category filtering to be implemented
-      },
-      selectedColor: Theme.of(context).colorScheme.primaryContainer,
-      checkmarkColor: AppTheme.primaryBlue,
-      labelStyle: TextStyle(
-        color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
-        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-      ),
-      side: BorderSide(
-        color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
-        width: 1,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
-    );
-  }
-}
-
 class _AuctionCard extends StatelessWidget {
   final String auctionId;
   final String title;
   final double currentPrice;
   final String timeLeft;
   final String status;
+  final String? imageUrl;
+  final Color statusColor;
 
   const _AuctionCard({
     required this.auctionId,
@@ -164,27 +312,16 @@ class _AuctionCard extends StatelessWidget {
     required this.currentPrice,
     required this.timeLeft,
     required this.status,
+    this.imageUrl,
+    required this.statusColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    Color statusColor;
-    switch (status) {
-      case 'active':
-        statusColor = AppTheme.success;
-        break;
-      case 'ending_soon':
-        statusColor = AppTheme.warning;
-        break;
-      default:
-        statusColor = AppTheme.textSecondary;
-    }
-
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: InkWell(
         onTap: () {
-          // Navigate to auction detail (will use real auctionId when available)
           Navigator.pushNamed(
             context,
             '/auctionDetail?auctionId=$auctionId',
@@ -196,7 +333,7 @@ class _AuctionCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Image placeholder
+              // Image or placeholder
               Container(
                 width: 100,
                 height: 100,
@@ -204,11 +341,38 @@ class _AuctionCard extends StatelessWidget {
                   color: AppTheme.backgroundGrey,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(
-                  Icons.image_outlined,
-                  color: AppTheme.textTertiary,
-                  size: 40,
-                ),
+                child: imageUrl != null && imageUrl!.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.network(
+                          imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(
+                              Icons.image_outlined,
+                              color: AppTheme.textTertiary,
+                              size: 40,
+                            );
+                          },
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                                strokeWidth: 2,
+                              ),
+                            );
+                          },
+                        ),
+                      )
+                    : Icon(
+                        Icons.image_outlined,
+                        color: AppTheme.textTertiary,
+                        size: 40,
+                      ),
               ),
               const SizedBox(width: 16),
               // Content
@@ -281,31 +445,3 @@ class _AuctionCard extends StatelessWidget {
     );
   }
 }
-
-// Mock data
-final List<Map<String, dynamic>> _mockAuctions = [
-  {
-    'title': 'Vintage Hermès Birkin Bag',
-    'currentPrice': 45000.0,
-    'timeLeft': '2d 5h',
-    'status': 'active',
-  },
-  {
-    'title': 'Rolex Submariner Date',
-    'currentPrice': 28000.0,
-    'timeLeft': '1d 12h',
-    'status': 'ending_soon',
-  },
-  {
-    'title': 'Cartier Love Bracelet',
-    'currentPrice': 12000.0,
-    'timeLeft': '5d 3h',
-    'status': 'active',
-  },
-  {
-    'title': 'Chanel Classic Flap Bag',
-    'currentPrice': 8500.0,
-    'timeLeft': '3d 8h',
-    'status': 'active',
-  },
-];

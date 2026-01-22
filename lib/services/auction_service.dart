@@ -753,6 +753,25 @@ class AuctionService {
         .snapshots();
   }
 
+  // Stream active auctions with category filter and ordering
+  Stream<QuerySnapshot> streamActiveAuctionsFiltered({
+    String? category,
+    int limit = 50,
+  }) {
+    Query query = _firestore
+        .collection('auctions')
+        .where('state', isEqualTo: 'ACTIVE');
+
+    if (category != null && category.isNotEmpty && category != 'All') {
+      query = query.where('category', isEqualTo: category);
+    }
+
+    return query
+        .orderBy('endsAt', descending: false) // Ending soonest first
+        .limit(limit)
+        .snapshots();
+  }
+
   // Stream seller auctions
   Stream<QuerySnapshot> streamSellerAuctions(String sellerId) {
     return _firestore
