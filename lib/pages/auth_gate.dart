@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/firestore_service.dart';
-import 'auth_test_page.dart';
+import 'login_phone_page.dart';
 import 'create_profile_page.dart';
 import 'home_page.dart';
 
@@ -59,19 +59,23 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
 
-        // If waiting for initial auth state, show AuthTestPage (not infinite loading)
+        // If waiting for initial auth state, show loading
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const AuthTestPage();
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
         }
 
         final user = snapshot.data;
 
-        // User not logged in -> return AuthTestPage
+        // User not logged in -> return LoginPhonePage
         if (user == null) {
           // Clear cache when user logs out
           _cachedUserId = null;
           _cachedUserExistsFuture = null;
-          return const AuthTestPage();
+          return const LoginPhonePage();
         }
 
         // User logged in -> check if user exists in Firestore

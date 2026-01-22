@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
+import 'pages/splash_screen.dart';
 import 'pages/auth_gate.dart';
-import 'pages/auth_test_page.dart';
+import 'pages/login_phone_page.dart';
+import 'pages/verify_otp_page.dart';
 import 'pages/create_profile_page.dart';
 import 'pages/home_page.dart';
 import 'pages/explore_page.dart';
@@ -44,10 +46,15 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      initialRoute: '/authGate',
+      initialRoute: '/splash',
       routes: {
+        '/splash': (context) => const SplashScreen(),
         '/authGate': (context) => const AuthGate(),
-        '/authTest': (context) => const AuthTestPage(),
+        '/login': (context) => const LoginPhonePage(),
+        '/verifyOtp': (context) => const VerifyOtpPage(
+              verificationId: '',
+              phoneNumber: '',
+            ),
         '/createProfile': (context) => const CreateProfilePage(),
         '/home': (context) => const HomePage(),
         '/explore': (context) => const ExplorePage(),

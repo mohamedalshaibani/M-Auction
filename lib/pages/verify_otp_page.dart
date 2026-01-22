@@ -1,63 +1,81 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/firestore_service.dart';
+import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
-class CreateProfilePage extends StatefulWidget {
-  const CreateProfilePage({super.key});
+class VerifyOtpPage extends StatefulWidget {
+  final String verificationId;
+  final String phoneNumber;
+
+  const VerifyOtpPage({
+    super.key,
+    required this.verificationId,
+    required this.phoneNumber,
+  });
 
   @override
-  State<CreateProfilePage> createState() => _CreateProfilePageState();
+  State<VerifyOtpPage> createState() => _VerifyOtpPageState();
 }
 
-class _CreateProfilePageState extends State<CreateProfilePage> {
-  final _displayNameController = TextEditingController();
+class _VerifyOtpPageState extends State<VerifyOtpPage> {
+  final _codeController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  final _firestoreService = FirestoreService();
-  bool _isSaving = false;
+  bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _displayNameController.dispose();
+    _codeController.dispose();
     super.dispose();
   }
 
-  Future<void> _saveProfile() async {
+  Future<void> _verifyCode() async {
     if (!mounted) return;
 
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() => _errorMessage = 'No user logged in');
-      return;
-    }
-
-    final displayName = _displayNameController.text.trim();
-
     setState(() {
-      _isSaving = true;
+      _isLoading = true;
       _errorMessage = null;
     });
 
-    try {
-      await _firestoreService.createUserAndWallet(
-        uid: user.uid,
-        displayName: displayName,
-        phoneNumber: user.phoneNumber ?? '',
-      );
+    final smsCode = _codeController.text.trim();
 
+    try {
+      final cred = PhoneAuthProvider.credential(
+        verificationId: widget.verificationId,
+        smsCode: smsCode,
+      );
+      await FirebaseAuth.instance.signInWithCredential(cred);
+      
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/authGate');
       }
-    } catch (e) {
+    } on FirebaseAuthException catch (e) {
+      debugPrint('FirebaseAuthException in signInWithCredential: ${e.code} - ${e.message}');
+      if (mounted) {
+        String errorMessage = 'Verification failed';
+        if (e.code == 'invalid-verification-code') {
+          errorMessage = 'Invalid verification code. Please try again.';
+        } else if (e.code == 'session-expired') {
+          errorMessage = 'Verification session expired. Please request a new code.';
+        } else {
+          errorMessage = e.message ?? e.code;
+        }
+
+        setState(() {
+          _isLoading = false;
+          _errorMessage = errorMessage;
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Unexpected error in verifyCode: $e');
+      debugPrint('Stack trace: $stackTrace');
       if (mounted) {
         setState(() {
-          _errorMessage = 'Error creating profile. Please try again.';
-          _isSaving = false;
+          _isLoading = false;
+          _errorMessage = 'Verification error. Please try again.';
         });
       }
     }
@@ -66,6 +84,9 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Verify Code'),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -81,7 +102,7 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                     children: [
                       // Header
                       Text(
-                        'Create Your Profile',
+                        'Enter Verification Code',
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
@@ -89,7 +110,7 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Let\'s set up your account',
+                        'We sent a code to ${widget.phoneNumber}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: AppTheme.textSecondary,
                             ),
@@ -97,21 +118,28 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                       ),
                       const SizedBox(height: 32),
                       
-                      // Display name input
+                      // OTP input
                       TextFormField(
-                        controller: _displayNameController,
-                        enabled: !_isSaving,
-                        decoration: const InputDecoration(
-                          labelText: 'Display Name',
-                          hintText: 'Enter your name',
-                          prefixIcon: Icon(Icons.person_outline),
+                        controller: _codeController,
+                        keyboardType: TextInputType.number,
+                        enabled: !_isLoading,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              letterSpacing: 8,
+                            ),
+                        maxLength: 6,
+                        decoration: InputDecoration(
+                          labelText: 'Verification Code',
+                          hintText: '000000',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          counterText: '',
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Please enter your display name';
+                            return 'Please enter the verification code';
                           }
-                          if (value.trim().length < 2) {
-                            return 'Name must be at least 2 characters';
+                          if (value.trim().length != 6) {
+                            return 'Code must be 6 digits';
                           }
                           return null;
                         },
@@ -153,10 +181,10 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                       
                       const SizedBox(height: 32),
                       
-                      // Continue button
+                      // Verify button
                       ElevatedButton(
-                        onPressed: _isSaving ? null : _saveProfile,
-                        child: _isSaving
+                        onPressed: _isLoading ? null : _verifyCode,
+                        child: _isLoading
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
@@ -165,7 +193,7 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
                               )
-                            : const Text('Continue'),
+                            : const Text('Verify'),
                       ),
                     ],
                   ),
