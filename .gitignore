@@ -1,53 +1,17 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 # Flutter/Dart
 .dart_tool/
-.build/
 build/
-pubspec.lock
-
-# iOS/Android
 ios/Pods/
 ios/.symlinks/
 ios/Flutter/ephemeral/
-ios/Runner.xcworkspace/
 android/.gradle/
 android/local.properties
 
-# Web/Node (Flutter web build tools)
-node_modules/
-package-lock.json
-
-# IDE
-.idea/
-.vscode/
-*.iml
+# Mac
 .DS_Store
-
-# Dependencies
-node_modules/
-
-# Flutter/Dart
-.dart_tool/
-build/
-.pub/
-.pub-cache/
-.flutter-plugins
-.flutter-plugins-dependencies
-
-# iOS
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/Flutter.framework/
-ios/Flutter/App.framework/
-ios/Flutter/Generated.xcconfig
-ios/Flutter/flutter_export_environment.sh
-ios/Runner/GeneratedPluginRegistrant.*
-
-# Android
-android/.gradle/
-android/app/build/
-
-# macOS
-macos/Pods/
-
-# Logs
-*.log
