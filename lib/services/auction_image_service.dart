@@ -11,9 +11,18 @@ class AuctionImageService {
   
   // Get Storage instance - use default instance (bucket is auto-configured from FirebaseOptions)
   // The bucket is automatically set from Firebase.initializeApp() options
+  // For iOS, we need to ensure the bucket is properly configured
   FirebaseStorage get _storage {
     try {
-      return FirebaseStorage.instance;
+      final instance = FirebaseStorage.instance;
+      // Verify bucket is set
+      final bucket = instance.app.options.storageBucket;
+      if (bucket == null || bucket.isEmpty) {
+        debugPrint('Warning: Storage bucket is not configured');
+      } else {
+        debugPrint('Storage bucket: $bucket');
+      }
+      return instance;
     } catch (e) {
       debugPrint('Error getting Storage instance: $e');
       rethrow;
