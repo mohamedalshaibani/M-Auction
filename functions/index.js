@@ -1,8 +1,17 @@
 const functions = require('firebase-functions');
 const {onObjectFinalized} = require('firebase-functions/v2/storage');
+const {defineString} = require('firebase-functions/params');
 const admin = require('firebase-admin');
-const stripeSecretKey = functions.config().stripe?.secret_key || 
-                        process.env.STRIPE_SECRET_KEY;
+
+// Migrate from functions.config() to params module (v7+)
+const stripeSecretKeyParam = defineString('STRIPE_SECRET_KEY', {
+  default: process.env.STRIPE_SECRET_KEY || '',
+});
+const stripeWebhookSecretParam = defineString('STRIPE_WEBHOOK_SECRET', {
+  default: process.env.STRIPE_WEBHOOK_SECRET || '',
+});
+
+const stripeSecretKey = stripeSecretKeyParam.value();
 const stripe = require('stripe')(stripeSecretKey);
 const {Storage} = require('@google-cloud/storage');
 const sharp = require('sharp');
@@ -352,8 +361,7 @@ exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
 // Stripe webhook handler
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
   const sig = req.headers['stripe-signature'];
-  const webhookSecret = functions.config().stripe?.webhook_secret || 
-                       process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = stripeWebhookSecretParam.value();
 
   if (!webhookSecret) {
     console.error('Webhook secret not configured');
