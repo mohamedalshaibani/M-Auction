@@ -62,11 +62,13 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                 child: Row(
                   children: [
-                    Image.asset(
-                      'assets/branding/logo_light.png',
-                      width: 32,
-                      height: 32,
-                      fit: BoxFit.contain,
+                    SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: Image.asset(
+                        'assets/branding/logo_light.png',
+                        fit: BoxFit.contain,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Text(
