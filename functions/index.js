@@ -1,5 +1,4 @@
-const functions = require('firebase-functions');
-const {onSchedule} = require('firebase-functions/v2/scheduler');
+const functions = require('firebase-functions/v1');
 const {defineString} = require('firebase-functions/params');
 const admin = require('firebase-admin');
 
@@ -677,8 +676,12 @@ async function handleChargeRefunded(charge) {
   }
 }
 
-// Scheduled function to enforce winner deadline (runs every 5 minutes) - Gen2
-exports.enforceWinnerDeadline = onSchedule('every 5 minutes', async (event) => {
+// Scheduled function to enforce winner deadline (runs every 5 minutes) - Gen1
+exports.enforceWinnerDeadline = functions
+  .region('us-central1')
+  .pubsub
+  .schedule('every 5 minutes')
+  .onRun(async (context) => {
   const now = admin.firestore.Timestamp.now();
   
   // Query auctions that need enforcement
@@ -799,7 +802,11 @@ exports.enforceWinnerDeadline = onSchedule('every 5 minutes', async (event) => {
 });
 
 // Scheduled function to close ended auctions (runs every 1 minute)
-exports.closeEndedAuctions = onSchedule('every 1 minutes', async (event) => {
+exports.closeEndedAuctions = functions
+  .region('us-central1')
+  .pubsub
+  .schedule('every 1 minutes')
+  .onRun(async (context) => {
   const now = admin.firestore.Timestamp.now();
   
   // Query active auctions that should have ended
