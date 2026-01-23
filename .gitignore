@@ -27,3 +27,4 @@ android/local.properties
 
 # Flutter generated
 .flutter-plugins-dependencies
+.env.luxuryauction-e9c56
