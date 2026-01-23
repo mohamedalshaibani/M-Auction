@@ -3,15 +3,18 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import '../firebase_options.dart';
 
 class AuctionImageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
+  // Get Storage instance with explicit bucket for compatibility
   FirebaseStorage get _storage {
-    if (kIsWeb) {
-      // For web, use default instance
-      return FirebaseStorage.instance;
+    final bucket = DefaultFirebaseOptions.currentPlatform.storageBucket;
+    if (bucket != null) {
+      return FirebaseStorage.instanceFor(bucket: bucket);
     }
     return FirebaseStorage.instance;
   }
