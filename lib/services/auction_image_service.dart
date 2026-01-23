@@ -9,14 +9,8 @@ import '../firebase_options.dart';
 class AuctionImageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Get Storage instance with explicit bucket for compatibility
-  FirebaseStorage get _storage {
-    final bucket = DefaultFirebaseOptions.currentPlatform.storageBucket;
-    if (bucket != null) {
-      return FirebaseStorage.instanceFor(bucket: bucket);
-    }
-    return FirebaseStorage.instance;
-  }
+  // Get Storage instance - use default instance (bucket is auto-configured)
+  FirebaseStorage get _storage => FirebaseStorage.instance;
 
   // Validate image file
   bool validateImage({
@@ -78,19 +72,33 @@ class AuctionImageService {
     }
 
     final path = 'auctions/$auctionId/original/$imageId.$extension';
-    final ref = _storage.ref(path);
-    
-    final metadata = SettableMetadata(
-      contentType: detectedContentType,
-    );
     
     try {
       debugPrint('Uploading to path: $path, size: $fileSize bytes, contentType: $detectedContentType');
-      await ref.putFile(file, metadata);
-      debugPrint('Upload successful: $path');
+      debugPrint('Storage bucket: ${_storage.app.options.storageBucket}');
+      debugPrint('User UID: ${user.uid}');
+      
+      final ref = _storage.ref(path);
+      
+      final metadata = SettableMetadata(
+        contentType: detectedContentType,
+        customMetadata: {
+          'uploadedBy': user.uid,
+          'auctionId': auctionId,
+        },
+      );
+      
+      // Use uploadTask to get better error information
+      final uploadTask = ref.putFile(file, metadata);
+      
+      // Wait for upload to complete
+      final snapshot = await uploadTask;
+      debugPrint('Upload successful: $path, bytesTransferred: ${snapshot.bytesTransferred}');
+      
       return path;
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Upload error: $e');
+      debugPrint('Stack trace: $stackTrace');
       rethrow;
     }
   }
