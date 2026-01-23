@@ -122,8 +122,13 @@ class AuctionImageService {
       // Small delay to ensure Storage is ready (helps with -1017 errors)
       await Future.delayed(const Duration(milliseconds: 100));
       
+      // Read file as bytes and use putData instead of putFile
+      // This can help avoid -1017 errors on iOS
+      final fileBytes = await file.readAsBytes();
+      debugPrint('File read as bytes: ${fileBytes.length} bytes');
+      
       // Use uploadTask with proper error handling
-      final uploadTask = ref.putFile(file, metadata);
+      final uploadTask = ref.putData(fileBytes, metadata);
       
       // Wait for upload to complete with timeout
       final snapshot = await uploadTask.timeout(
