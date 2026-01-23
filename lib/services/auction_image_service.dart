@@ -46,24 +46,53 @@ class AuctionImageService {
       throw Exception('User must be authenticated');
     }
 
+    // Verify auction exists and user is owner
+    final auctionDoc = await _firestore.collection('auctions').doc(auctionId).get();
+    if (!auctionDoc.exists) {
+      throw Exception('Auction not found. Please create the auction first.');
+    }
+    
+    final auctionData = auctionDoc.data()!;
+    final ownerUid = auctionData['ownerUid'] as String? ?? auctionData['sellerId'] as String?;
+    if (ownerUid != user.uid) {
+      throw Exception('You are not authorized to upload images for this auction');
+    }
+
     // Verify file size
     final fileSize = await file.length();
+    final detectedContentType = contentType ?? 'image/jpeg';
+    
     if (!validateImage(
       fileSizeBytes: fileSize,
-      contentType: contentType ?? 'image/jpeg',
+      contentType: detectedContentType,
     )) {
       throw Exception('Invalid image: size must be <= 5MB and format must be jpg/jpeg/png/webp');
     }
 
-    final path = 'auctions/$auctionId/original/$imageId.jpg';
+    // Determine file extension from content type
+    String extension = 'jpg';
+    if (detectedContentType.contains('png')) {
+      extension = 'png';
+    } else if (detectedContentType.contains('webp')) {
+      extension = 'webp';
+    }
+
+    final path = 'auctions/$auctionId/original/$imageId.$extension';
     final ref = _storage.ref(path);
     
     final metadata = SettableMetadata(
-      contentType: contentType ?? 'image/jpeg',
+      contentType: detectedContentType,
     );
     
-    await ref.putFile(file, metadata);
-    return path;
+    try {
+      debugPrint('Uploading to path: $path, size: $fileSize bytes, contentType: $detectedContentType');
+      await ref.putFile(file, metadata);
+      debugPrint('Upload successful: $path');
+      return path;
+    } catch (e) {
+      debugPrint('Upload error: $e');
+      rethrow;
+    }
   }
 
   // Upload image from bytes (for web)

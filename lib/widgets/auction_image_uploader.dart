@@ -102,7 +102,15 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
   }
 
   Future<String?> _getContentType(XFile file) async {
-    final path = file.path;
+    final path = file.path.toLowerCase();
+    final mimeType = file.mimeType;
+    
+    // Prefer mimeType from XFile if available
+    if (mimeType != null && mimeType.startsWith('image/')) {
+      return mimeType;
+    }
+    
+    // Fallback to extension-based detection
     if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
       return 'image/jpeg';
     } else if (path.endsWith('.png')) {
