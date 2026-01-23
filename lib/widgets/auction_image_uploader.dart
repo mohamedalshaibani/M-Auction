@@ -27,7 +27,7 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
   final Map<String, String> _uploadStatus = {}; // imageId -> status
   final Map<String, double> _uploadProgress = {}; // imageId -> progress
   bool _isUploading = false; // Track if upload is in progress
-  static const int _maxConcurrentUploads = 2; // Limit concurrent uploads
+  static const int _maxConcurrentUploads = 1; // One at a time to avoid OOM / "Lost connection" on iOS
 
   @override
   void initState() {
@@ -144,10 +144,11 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
         }
         
         final file = _uploadQueue.removeAt(0);
-        final uploadFuture = _uploadImage(file).whenComplete(() {
-          activeUploads.removeWhere((f) => f == uploadFuture);
+        final f = _uploadImage(file);
+        f.whenComplete(() {
+          activeUploads.removeWhere((x) => x == f);
         });
-        activeUploads.add(uploadFuture);
+        activeUploads.add(f);
         debugPrint('[Upload] Started upload for: ${file.name}');
       }
       
