@@ -1,9 +1,11 @@
 const functions = require('firebase-functions');
 const {onObjectFinalized} = require('firebase-functions/v2/storage');
+const {onSchedule} = require('firebase-functions/v2/scheduler');
 const {defineString} = require('firebase-functions/params');
 const admin = require('firebase-admin');
 
 // Migrate from functions.config() to params module (v7+)
+// Don't call .value() at module load - call it at runtime inside functions
 const stripeSecretKeyParam = defineString('STRIPE_SECRET_KEY', {
   default: process.env.STRIPE_SECRET_KEY || '',
 });
@@ -11,8 +13,8 @@ const stripeWebhookSecretParam = defineString('STRIPE_WEBHOOK_SECRET', {
   default: process.env.STRIPE_WEBHOOK_SECRET || '',
 });
 
-const stripeSecretKey = stripeSecretKeyParam.value();
-const stripe = require('stripe')(stripeSecretKey);
+// Initialize Stripe - will get secret at runtime
+let stripe;
 const {Storage} = require('@google-cloud/storage');
 const sharp = require('sharp');
 
@@ -25,6 +27,12 @@ exports.createPaymentIntent = functions.https.onCall(async (data, context) => {
   // Verify authentication
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  // Initialize Stripe with secret at runtime
+  if (!stripe) {
+    const secretKey = stripeSecretKeyParam.value();
+    stripe = require('stripe')(secretKey);
   }
 
   const uid = context.auth.uid; // Use authenticated user's UID
@@ -228,6 +236,12 @@ exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
+  // Initialize Stripe with secret at runtime
+  if (!stripe) {
+    const secretKey = stripeSecretKeyParam.value();
+    stripe = require('stripe')(secretKey);
+  }
+
   // Check if user is admin
   const userDoc = await db.collection('users').doc(context.auth.uid).get();
   if (!userDoc.exists) {
@@ -360,6 +374,12 @@ exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
 
 // Stripe webhook handler
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
+  // Initialize Stripe with secret at runtime
+  if (!stripe) {
+    const secretKey = stripeSecretKeyParam.value();
+    stripe = require('stripe')(secretKey);
+  }
+
   const sig = req.headers['stripe-signature'];
   const webhookSecret = stripeWebhookSecretParam.value();
 
@@ -658,8 +678,8 @@ async function handleChargeRefunded(charge) {
   }
 }
 
-// Scheduled function to enforce winner deadline (runs every 5 minutes)
-exports.enforceWinnerDeadline = functions.pubsub.schedule('every 5 minutes').onRun(async (context) => {
+// Scheduled function to enforce winner deadline (runs every 5 minutes) - Gen2
+exports.enforceWinnerDeadline = onSchedule('every 5 minutes', async (event) => {
   const now = admin.firestore.Timestamp.now();
   
   // Query auctions that need enforcement
@@ -780,7 +800,7 @@ exports.enforceWinnerDeadline = functions.pubsub.schedule('every 5 minutes').onR
 });
 
 // Scheduled function to close ended auctions (runs every 1 minute)
-exports.closeEndedAuctions = functions.pubsub.schedule('every 1 minutes').onRun(async (context) => {
+exports.closeEndedAuctions = onSchedule('every 1 minutes', async (event) => {
   const now = admin.firestore.Timestamp.now();
   
   // Query active auctions that should have ended
