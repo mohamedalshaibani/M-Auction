@@ -52,57 +52,74 @@ class AuctionImageService {
     required File file,
     String? contentType,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User must be authenticated');
-    }
-
-    // Refresh auth token to ensure it's valid
-    try {
-      await user.getIdToken(true); // Force refresh
-    } catch (e) {
-      debugPrint('Warning: Could not refresh auth token: $e');
-    }
-
-    // Verify auction exists and user is owner
-    final auctionDoc = await _firestore.collection('auctions').doc(auctionId).get();
-    if (!auctionDoc.exists) {
-      throw Exception('Auction not found. Please create the auction first.');
-    }
-    
-    final auctionData = auctionDoc.data()!;
-    final ownerUid = auctionData['ownerUid'] as String? ?? auctionData['sellerId'] as String?;
-    if (ownerUid != user.uid) {
-      throw Exception('You are not authorized to upload images for this auction');
-    }
-
-    // Verify file size
-    final fileSize = await file.length();
-    final detectedContentType = contentType ?? 'image/jpeg';
-    
-    if (!validateImage(
-      fileSizeBytes: fileSize,
-      contentType: detectedContentType,
-    )) {
-      throw Exception('Invalid image: size must be <= 5MB and format must be jpg/jpeg/png/webp');
-    }
-
-    // Determine file extension from content type
-    String extension = 'jpg';
-    if (detectedContentType.contains('png')) {
-      extension = 'png';
-    } else if (detectedContentType.contains('webp')) {
-      extension = 'webp';
-    }
-
-    // Sanitize imageId to avoid path issues
-    final sanitizedImageId = imageId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-    final path = 'auctions/$auctionId/original/$sanitizedImageId.$extension';
+    debugPrint('[AuctionImageService] Starting upload for imageId: $imageId');
     
     try {
-      debugPrint('Uploading to path: $path, size: $fileSize bytes, contentType: $detectedContentType');
-      debugPrint('User UID: ${user.uid}, Auction ID: $auctionId');
-      debugPrint('File path: ${file.path}');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('[AuctionImageService] User not authenticated');
+        throw Exception('User must be authenticated');
+      }
+
+      debugPrint('[AuctionImageService] User authenticated: ${user.uid}');
+
+      // Refresh auth token to ensure it's valid
+      try {
+        debugPrint('[AuctionImageService] Refreshing auth token');
+        await user.getIdToken(true); // Force refresh
+        debugPrint('[AuctionImageService] Auth token refreshed successfully');
+      } catch (e) {
+        debugPrint('[AuctionImageService] Warning: Could not refresh auth token: $e');
+        // Continue anyway - token might still be valid
+      }
+
+      // Verify auction exists and user is owner
+      debugPrint('[AuctionImageService] Verifying auction: $auctionId');
+      final auctionDoc = await _firestore.collection('auctions').doc(auctionId).get();
+      if (!auctionDoc.exists) {
+        debugPrint('[AuctionImageService] Auction not found: $auctionId');
+        throw Exception('Auction not found. Please create the auction first.');
+      }
+      
+      final auctionData = auctionDoc.data()!;
+      final ownerUid = auctionData['ownerUid'] as String? ?? auctionData['sellerId'] as String?;
+      if (ownerUid != user.uid) {
+        debugPrint('[AuctionImageService] Authorization failed. Owner: $ownerUid, User: ${user.uid}');
+        throw Exception('You are not authorized to upload images for this auction');
+      }
+      
+      debugPrint('[AuctionImageService] Authorization verified');
+
+      // Verify file size
+      debugPrint('[AuctionImageService] Checking file size');
+      final fileSize = await file.length();
+      final detectedContentType = contentType ?? 'image/jpeg';
+      
+      debugPrint('[AuctionImageService] File size: $fileSize bytes, contentType: $detectedContentType');
+      
+      if (!validateImage(
+        fileSizeBytes: fileSize,
+        contentType: detectedContentType,
+      )) {
+        debugPrint('[AuctionImageService] Image validation failed');
+        throw Exception('Invalid image: size must be <= 5MB and format must be jpg/jpeg/png/webp');
+      }
+
+      // Determine file extension from content type
+      String extension = 'jpg';
+      if (detectedContentType.contains('png')) {
+        extension = 'png';
+      } else if (detectedContentType.contains('webp')) {
+        extension = 'webp';
+      }
+
+      // Sanitize imageId to avoid path issues
+      final sanitizedImageId = imageId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+      final path = 'auctions/$auctionId/original/$sanitizedImageId.$extension';
+      
+      debugPrint('[AuctionImageService] Uploading to path: $path');
+      debugPrint('[AuctionImageService] User UID: ${user.uid}, Auction ID: $auctionId');
+      debugPrint('[AuctionImageService] File path: ${file.path}');
       
       final ref = _storage.ref(path);
       
@@ -116,6 +133,7 @@ class AuctionImageService {
       
       // Verify file exists and is readable
       if (!await file.exists()) {
+        debugPrint('[AuctionImageService] File does not exist: ${file.path}');
         throw Exception('File does not exist: ${file.path}');
       }
       
@@ -124,30 +142,35 @@ class AuctionImageService {
       
       // Read file as bytes and use putData instead of putFile
       // This can help avoid -1017 errors on iOS
+      // Note: For very large files, consider streaming or compression
+      debugPrint('[AuctionImageService] Reading file as bytes...');
       final fileBytes = await file.readAsBytes();
-      debugPrint('File read as bytes: ${fileBytes.length} bytes');
+      debugPrint('[AuctionImageService] File read as bytes: ${fileBytes.length} bytes');
       
       // Use uploadTask with proper error handling
+      debugPrint('[AuctionImageService] Starting Storage upload...');
       final uploadTask = ref.putData(fileBytes, metadata);
       
       // Wait for upload to complete with timeout
       final snapshot = await uploadTask.timeout(
         const Duration(seconds: 60),
         onTimeout: () {
+          debugPrint('[AuctionImageService] Upload timeout after 60 seconds');
           throw Exception('Upload timeout after 60 seconds');
         },
       );
       
-      debugPrint('Upload successful: $path, bytesTransferred: ${snapshot.bytesTransferred}');
+      debugPrint('[AuctionImageService] Upload successful: $path, bytesTransferred: ${snapshot.bytesTransferred}');
       
       return path;
-    } on firebase_core.FirebaseException catch (e) {
-      debugPrint('Firebase Storage error: code=${e.code}, message=${e.message}');
-      debugPrint('Error details: ${e.toString()}');
+    } on firebase_core.FirebaseException catch (e, stackTrace) {
+      debugPrint('[AuctionImageService] Firebase Storage error: code=${e.code}, message=${e.message}');
+      debugPrint('[AuctionImageService] Error details: ${e.toString()}');
+      debugPrint('[AuctionImageService] Stack trace: $stackTrace');
       throw Exception('Storage error (${e.code}): ${e.message ?? 'Unknown error'}');
     } catch (e, stackTrace) {
-      debugPrint('Upload error: $e');
-      debugPrint('Stack trace: $stackTrace');
+      debugPrint('[AuctionImageService] Upload error: $e');
+      debugPrint('[AuctionImageService] Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -191,61 +214,81 @@ class AuctionImageService {
     required int order,
     required bool isPrimary,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User must be authenticated');
-    }
-
-    final auctionRef = _firestore.collection('auctions').doc(auctionId);
+    debugPrint('[AuctionImageService] Adding image metadata for: $imageId');
     
-    // Use transaction to ensure atomic update
-    await _firestore.runTransaction((transaction) async {
-      final auctionDoc = await transaction.get(auctionRef);
-      if (!auctionDoc.exists) {
-        throw Exception('Auction not found');
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('[AuctionImageService] User not authenticated for metadata update');
+        throw Exception('User must be authenticated');
       }
 
-      final data = auctionDoc.data()!;
-      final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
+      final auctionRef = _firestore.collection('auctions').doc(auctionId);
       
-      // Verify ownership
-      if (ownerUid != user.uid) {
-        throw Exception('Only auction owner can add images');
-      }
-
-      final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
-      
-      // Check max 6 images
-      if (images.length >= 6) {
-        throw Exception('Maximum 6 images allowed');
-      }
-
-      // If this is the first image, set as primary
-      final willBePrimary = images.isEmpty || isPrimary;
-      
-      // If setting this as primary, unset others
-      if (willBePrimary) {
-        for (var img in images) {
-          img['isPrimary'] = false;
+      // Use transaction to ensure atomic update
+      debugPrint('[AuctionImageService] Starting Firestore transaction for metadata');
+      await _firestore.runTransaction((transaction) async {
+        final auctionDoc = await transaction.get(auctionRef);
+        if (!auctionDoc.exists) {
+          debugPrint('[AuctionImageService] Auction not found in transaction: $auctionId');
+          throw Exception('Auction not found');
         }
-      }
 
-      // Add new image
-      images.add({
-        'id': imageId,
-        'path': path,
-        'wmPath': '', // Will be set by Cloud Function
-        'url': '', // Will be set by Cloud Function
-        'isPrimary': willBePrimary,
-        'order': order,
-        'uploadedAt': FieldValue.serverTimestamp(),
-      });
+        final data = auctionDoc.data()!;
+        final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
+        
+        // Verify ownership
+        if (ownerUid != user.uid) {
+          debugPrint('[AuctionImageService] Ownership verification failed. Owner: $ownerUid, User: ${user.uid}');
+          throw Exception('Only auction owner can add images');
+        }
 
-      transaction.update(auctionRef, {
-        'images': images,
-        'ownerUid': ownerUid, // Ensure ownerUid is set
+        final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
+        
+        debugPrint('[AuctionImageService] Current images count: ${images.length}');
+        
+        // Check max 6 images
+        if (images.length >= 6) {
+          debugPrint('[AuctionImageService] Maximum 6 images already reached');
+          throw Exception('Maximum 6 images allowed');
+        }
+
+        // If this is the first image, set as primary
+        final willBePrimary = images.isEmpty || isPrimary;
+        
+        debugPrint('[AuctionImageService] Will be primary: $willBePrimary');
+        
+        // If setting this as primary, unset others
+        if (willBePrimary) {
+          for (var img in images) {
+            img['isPrimary'] = false;
+          }
+        }
+
+        // Add new image
+        images.add({
+          'id': imageId,
+          'path': path,
+          'wmPath': '', // Will be set by Cloud Function
+          'url': '', // Will be set by Cloud Function
+          'isPrimary': willBePrimary,
+          'order': order,
+          'uploadedAt': FieldValue.serverTimestamp(),
+        });
+
+        debugPrint('[AuctionImageService] Updating Firestore with ${images.length} images');
+        transaction.update(auctionRef, {
+          'images': images,
+          'ownerUid': ownerUid, // Ensure ownerUid is set
+        });
       });
-    });
+      
+      debugPrint('[AuctionImageService] Image metadata added successfully');
+    } catch (e, stackTrace) {
+      debugPrint('[AuctionImageService] Error adding image metadata: $e');
+      debugPrint('[AuctionImageService] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   // Update image metadata (set primary, reorder)
@@ -255,69 +298,86 @@ class AuctionImageService {
     bool? isPrimary,
     int? order,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User must be authenticated');
-    }
-
-    final auctionRef = _firestore.collection('auctions').doc(auctionId);
+    debugPrint('[AuctionImageService] Updating image metadata for: $imageId');
     
-    await _firestore.runTransaction((transaction) async {
-      final auctionDoc = await transaction.get(auctionRef);
-      if (!auctionDoc.exists) {
-        throw Exception('Auction not found');
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('[AuctionImageService] User not authenticated for metadata update');
+        throw Exception('User must be authenticated');
       }
 
-      final data = auctionDoc.data()!;
-      final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
+      final auctionRef = _firestore.collection('auctions').doc(auctionId);
       
-      if (ownerUid != user.uid) {
-        throw Exception('Only auction owner can update images');
-      }
+      await _firestore.runTransaction((transaction) async {
+        final auctionDoc = await transaction.get(auctionRef);
+        if (!auctionDoc.exists) {
+          debugPrint('[AuctionImageService] Auction not found: $auctionId');
+          throw Exception('Auction not found');
+        }
 
-      final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
-      
-      // Find and update image
-      var found = false;
-      for (var img in images) {
-        if (img['id'] == imageId) {
-          found = true;
-          if (isPrimary != null) {
-            // If setting as primary, unset others
-            if (isPrimary) {
-              for (var other in images) {
-                if (other['id'] != imageId) {
-                  other['isPrimary'] = false;
+        final data = auctionDoc.data()!;
+        final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
+        
+        if (ownerUid != user.uid) {
+          debugPrint('[AuctionImageService] Ownership verification failed');
+          throw Exception('Only auction owner can update images');
+        }
+
+        final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
+        
+        // Find and update image
+        var found = false;
+        for (var img in images) {
+          if (img['id'] == imageId) {
+            found = true;
+            if (isPrimary != null) {
+              // If setting as primary, unset others
+              if (isPrimary) {
+                for (var other in images) {
+                  if (other['id'] != imageId) {
+                    other['isPrimary'] = false;
+                  }
                 }
               }
+              img['isPrimary'] = isPrimary;
+              debugPrint('[AuctionImageService] Set primary: $isPrimary');
             }
-            img['isPrimary'] = isPrimary;
+            if (order != null) {
+              img['order'] = order;
+              debugPrint('[AuctionImageService] Set order: $order');
+            }
+            break;
           }
-          if (order != null) {
-            img['order'] = order;
-          }
-          break;
         }
-      }
 
-      if (!found) {
-        throw Exception('Image not found');
-      }
-
-      // Ensure exactly one primary
-      final primaryCount = images.where((img) => img['isPrimary'] == true).length;
-      if (primaryCount != 1) {
-        // Auto-fix: set first image as primary
-        if (images.isNotEmpty) {
-          for (var img in images) {
-            img['isPrimary'] = false;
-          }
-          images[0]['isPrimary'] = true;
+        if (!found) {
+          debugPrint('[AuctionImageService] Image not found: $imageId');
+          throw Exception('Image not found');
         }
-      }
 
-      transaction.update(auctionRef, {'images': images});
-    });
+        // Ensure exactly one primary
+        final primaryCount = images.where((img) => img['isPrimary'] == true).length;
+        if (primaryCount != 1) {
+          debugPrint('[AuctionImageService] Primary count is $primaryCount, auto-fixing...');
+          // Auto-fix: set first image as primary
+          if (images.isNotEmpty) {
+            for (var img in images) {
+              img['isPrimary'] = false;
+            }
+            images[0]['isPrimary'] = true;
+          }
+        }
+
+        transaction.update(auctionRef, {'images': images});
+      });
+      
+      debugPrint('[AuctionImageService] Image metadata updated successfully');
+    } catch (e, stackTrace) {
+      debugPrint('[AuctionImageService] Error updating image metadata: $e');
+      debugPrint('[AuctionImageService] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   // Delete image
@@ -325,59 +385,78 @@ class AuctionImageService {
     required String auctionId,
     required String imageId,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User must be authenticated');
-    }
-
-    final auctionRef = _firestore.collection('auctions').doc(auctionId);
+    debugPrint('[AuctionImageService] Deleting image: $imageId');
     
-    await _firestore.runTransaction((transaction) async {
-      final auctionDoc = await transaction.get(auctionRef);
-      if (!auctionDoc.exists) {
-        throw Exception('Auction not found');
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('[AuctionImageService] User not authenticated for delete');
+        throw Exception('User must be authenticated');
       }
 
-      final data = auctionDoc.data()!;
-      final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
+      final auctionRef = _firestore.collection('auctions').doc(auctionId);
       
-      if (ownerUid != user.uid) {
-        throw Exception('Only auction owner can delete images');
-      }
-
-      final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
-      final imageToDelete = images.firstWhere(
-        (img) => img['id'] == imageId,
-        orElse: () => throw Exception('Image not found'),
-      );
-
-      final wasPrimary = imageToDelete['isPrimary'] == true;
-      final path = imageToDelete['path'] as String? ?? '';
-      final wmPath = imageToDelete['wmPath'] as String? ?? '';
-
-      // Remove from array
-      images.removeWhere((img) => img['id'] == imageId);
-
-      // If deleted was primary and there are remaining images, set first as primary
-      if (wasPrimary && images.isNotEmpty) {
-        images[0]['isPrimary'] = true;
-      }
-
-      transaction.update(auctionRef, {'images': images});
-
-      // Delete from Storage (fire and forget - don't block on this)
-      try {
-        if (path.isNotEmpty) {
-          await _storage.ref(path).delete();
+      await _firestore.runTransaction((transaction) async {
+        final auctionDoc = await transaction.get(auctionRef);
+        if (!auctionDoc.exists) {
+          debugPrint('[AuctionImageService] Auction not found: $auctionId');
+          throw Exception('Auction not found');
         }
-        if (wmPath.isNotEmpty) {
-          await _storage.ref(wmPath).delete();
+
+        final data = auctionDoc.data()!;
+        final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
+        
+        if (ownerUid != user.uid) {
+          debugPrint('[AuctionImageService] Ownership verification failed for delete');
+          throw Exception('Only auction owner can delete images');
         }
-      } catch (e) {
-        // Log but don't fail transaction
-        debugPrint('Error deleting storage files: $e');
-      }
-    });
+
+        final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
+        final imageToDelete = images.firstWhere(
+          (img) => img['id'] == imageId,
+          orElse: () => throw Exception('Image not found'),
+        );
+
+        final wasPrimary = imageToDelete['isPrimary'] == true;
+        final path = imageToDelete['path'] as String? ?? '';
+        final wmPath = imageToDelete['wmPath'] as String? ?? '';
+
+        debugPrint('[AuctionImageService] Image to delete - wasPrimary: $wasPrimary, path: $path');
+
+        // Remove from array
+        images.removeWhere((img) => img['id'] == imageId);
+
+        // If deleted was primary and there are remaining images, set first as primary
+        if (wasPrimary && images.isNotEmpty) {
+          images[0]['isPrimary'] = true;
+          debugPrint('[AuctionImageService] Set first remaining image as primary');
+        }
+
+        transaction.update(auctionRef, {'images': images});
+
+        // Delete from Storage (fire and forget - don't block on this)
+        try {
+          if (path.isNotEmpty) {
+            debugPrint('[AuctionImageService] Deleting storage file: $path');
+            await _storage.ref(path).delete();
+          }
+          if (wmPath.isNotEmpty) {
+            debugPrint('[AuctionImageService] Deleting watermark storage file: $wmPath');
+            await _storage.ref(wmPath).delete();
+          }
+        } catch (e, stackTrace) {
+          // Log but don't fail transaction
+          debugPrint('[AuctionImageService] Error deleting storage files: $e');
+          debugPrint('[AuctionImageService] Stack trace: $stackTrace');
+        }
+      });
+      
+      debugPrint('[AuctionImageService] Image deleted successfully');
+    } catch (e, stackTrace) {
+      debugPrint('[AuctionImageService] Error deleting image: $e');
+      debugPrint('[AuctionImageService] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   // Reorder images

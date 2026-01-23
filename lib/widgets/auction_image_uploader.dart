@@ -23,8 +23,11 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
   final _imageService = AuctionImageService();
   final _picker = ImagePicker();
   final List<XFile> _selectedFiles = [];
+  final List<XFile> _uploadQueue = []; // Queue for sequential uploads
   final Map<String, String> _uploadStatus = {}; // imageId -> status
   final Map<String, double> _uploadProgress = {}; // imageId -> progress
+  bool _isUploading = false; // Track if upload is in progress
+  static const int _maxConcurrentUploads = 2; // Limit concurrent uploads
 
   @override
   void initState() {
@@ -81,14 +84,15 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
         validFiles.add(file);
       }
 
-      setState(() {
-        _selectedFiles.addAll(validFiles);
-      });
-
-      // Auto-upload valid files
-      for (var file in validFiles) {
-        _uploadImage(file);
+      if (mounted) {
+        setState(() {
+          _selectedFiles.addAll(validFiles);
+          _uploadQueue.addAll(validFiles);
+        });
       }
+
+      // Start sequential uploads (max 2 concurrent)
+      _processUploadQueue();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -121,15 +125,64 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
     return 'image/jpeg'; // Default
   }
 
+  // Process upload queue sequentially (max 2 concurrent)
+  Future<void> _processUploadQueue() async {
+    if (_isUploading || _uploadQueue.isEmpty) return;
+    
+    _isUploading = true;
+    debugPrint('[Upload] Starting upload queue processing. Queue size: ${_uploadQueue.length}');
+    
+    final activeUploads = <Future<void>>[];
+    
+    while (_uploadQueue.isNotEmpty || activeUploads.isNotEmpty) {
+      // Start new uploads if we have capacity
+      while (activeUploads.length < _maxConcurrentUploads && _uploadQueue.isNotEmpty) {
+        if (!mounted) {
+          debugPrint('[Upload] Widget disposed, stopping upload queue');
+          _isUploading = false;
+          return;
+        }
+        
+        final file = _uploadQueue.removeAt(0);
+        final uploadFuture = _uploadImage(file).whenComplete(() {
+          activeUploads.removeWhere((f) => f == uploadFuture);
+        });
+        activeUploads.add(uploadFuture);
+        debugPrint('[Upload] Started upload for: ${file.name}');
+      }
+      
+      // Wait for at least one upload to complete
+      if (activeUploads.isNotEmpty) {
+        await Future.any(activeUploads);
+      }
+    }
+    
+    _isUploading = false;
+    debugPrint('[Upload] Upload queue processing complete');
+  }
+
   Future<void> _uploadImage(XFile file) async {
     final imageId = '${DateTime.now().millisecondsSinceEpoch}_${file.name.hashCode}';
     
-    setState(() {
-      _uploadStatus[imageId] = 'uploading';
-      _uploadProgress[imageId] = 0.0;
-    });
+    debugPrint('[Upload] Starting upload for imageId: $imageId, file: ${file.name}');
+    
+    if (!mounted) {
+      debugPrint('[Upload] Widget not mounted, aborting upload for: $imageId');
+      return;
+    }
+    
+    try {
+      setState(() {
+        _uploadStatus[imageId] = 'uploading';
+        _uploadProgress[imageId] = 0.0;
+      });
+    } catch (e) {
+      debugPrint('[Upload] Error in setState before upload: $e');
+      return;
+    }
 
     try {
+      debugPrint('[Upload] Getting content type for: ${file.name}');
       final contentType = await _getContentType(file);
       final fileObj = File(file.path);
       
@@ -138,26 +191,40 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
         throw Exception('File no longer exists. Please try again.');
       }
       
+      debugPrint('[Upload] File exists, size: ${await fileObj.length()} bytes');
+      
       // Upload to Storage with error handling
       String uploadedPath;
       try {
+        debugPrint('[Upload] Calling uploadImage service for: $imageId');
         uploadedPath = await _imageService.uploadImage(
           auctionId: widget.auctionId,
           imageId: imageId,
           file: fileObj,
           contentType: contentType,
         );
-      } catch (uploadError) {
+        debugPrint('[Upload] Storage upload successful: $uploadedPath');
+      } catch (uploadError, stackTrace) {
         // Prevent app crash - log and show user-friendly error
-        debugPrint('Storage upload error: $uploadError');
+        debugPrint('[Upload] Storage upload error: $uploadError');
+        debugPrint('[Upload] Stack trace: $stackTrace');
         throw Exception('Failed to upload image. Please check your connection and try again.');
       }
 
+      if (!mounted) {
+        debugPrint('[Upload] Widget disposed after upload, aborting metadata update');
+        return;
+      }
+
       // Add metadata to Firestore
+      debugPrint('[Upload] Getting current images for metadata update');
       final currentImages = await _getCurrentImages();
       final isPrimary = currentImages.isEmpty; // First image is primary
       
+      debugPrint('[Upload] Current images count: ${currentImages.length}, isPrimary: $isPrimary');
+      
       try {
+        debugPrint('[Upload] Adding image metadata to Firestore');
         await _imageService.addImageMetadata(
           auctionId: widget.auctionId,
           imageId: imageId,
@@ -165,8 +232,11 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
           order: currentImages.length,
           isPrimary: isPrimary,
         );
-      } catch (metadataError) {
+        debugPrint('[Upload] Image metadata added successfully');
+      } catch (metadataError, stackTrace) {
         // Don't fail completely - image is uploaded, metadata can be retried
+        debugPrint('[Upload] Metadata update error: $metadataError');
+        debugPrint('[Upload] Stack trace: $stackTrace');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -175,21 +245,45 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
             ),
           );
         }
+        // Still continue to watermark wait
       }
 
-      setState(() {
-        _uploadStatus[imageId] = 'processing';
-        _uploadProgress[imageId] = 1.0;
-        _selectedFiles.removeWhere((f) => f.path == file.path);
-      });
+      if (!mounted) {
+        debugPrint('[Upload] Widget disposed after metadata update');
+        return;
+      }
+
+      try {
+        setState(() {
+          _uploadStatus[imageId] = 'processing';
+          _uploadProgress[imageId] = 1.0;
+          _selectedFiles.removeWhere((f) => f.path == file.path);
+        });
+      } catch (e) {
+        debugPrint('[Upload] Error in setState after metadata: $e');
+      }
 
       // Wait for watermark processing (poll Firestore for url)
-      _waitForWatermark(imageId);
-    } catch (e) {
-      setState(() {
-        _uploadStatus[imageId] = 'error';
-        _selectedFiles.removeWhere((f) => f.path == file.path);
-      });
+      debugPrint('[Upload] Starting watermark wait for: $imageId');
+      await _waitForWatermark(imageId);
+      debugPrint('[Upload] Watermark wait complete for: $imageId');
+    } catch (e, stackTrace) {
+      debugPrint('[Upload] Upload error for $imageId: $e');
+      debugPrint('[Upload] Stack trace: $stackTrace');
+      
+      if (!mounted) {
+        debugPrint('[Upload] Widget not mounted, cannot update error state');
+        return;
+      }
+      
+      try {
+        setState(() {
+          _uploadStatus[imageId] = 'error';
+          _selectedFiles.removeWhere((f) => f.path == file.path);
+        });
+      } catch (setStateError) {
+        debugPrint('[Upload] Error in setState for error case: $setStateError');
+      }
       
       if (mounted) {
         // Show user-friendly error message
@@ -206,14 +300,26 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
   }
 
   Future<List<Map<String, dynamic>>> _getCurrentImages() async {
-    final doc = await FirebaseFirestore.instance
-        .collection('auctions')
-        .doc(widget.auctionId)
-        .get();
-    
-    if (!doc.exists) return [];
-    final data = doc.data()!;
-    return List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('auctions')
+          .doc(widget.auctionId)
+          .get();
+      
+      if (!doc.exists) {
+        debugPrint('[GetCurrentImages] Auction document does not exist: ${widget.auctionId}');
+        return [];
+      }
+      
+      final data = doc.data()!;
+      final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
+      debugPrint('[GetCurrentImages] Found ${images.length} images');
+      return images;
+    } catch (e, stackTrace) {
+      debugPrint('[GetCurrentImages] Error getting current images: $e');
+      debugPrint('[GetCurrentImages] Stack trace: $stackTrace');
+      return [];
+    }
   }
 
   Future<void> _waitForWatermark(String imageId) async {
@@ -221,40 +327,77 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
     int attempts = 0;
     const maxAttempts = 30; // 30 seconds max wait
     
+    debugPrint('[Watermark] Starting watermark wait for: $imageId');
+    
     while (attempts < maxAttempts) {
-      await Future.delayed(const Duration(seconds: 1));
-      
-      final images = await _getCurrentImages();
-      final image = images.firstWhere(
-        (img) => img['id'] == imageId,
-        orElse: () => <String, dynamic>{},
-      );
-      
-      final url = image['url'] as String? ?? '';
-      if (url.isNotEmpty) {
-        setState(() {
-          _uploadStatus[imageId] = 'complete';
-        });
+      if (!mounted) {
+        debugPrint('[Watermark] Widget disposed during watermark wait for: $imageId');
         return;
       }
       
-      attempts++;
+      await Future.delayed(const Duration(seconds: 1));
+      
+      try {
+        final images = await _getCurrentImages();
+        final image = images.firstWhere(
+          (img) => img['id'] == imageId,
+          orElse: () => <String, dynamic>{},
+        );
+        
+        final url = image['url'] as String? ?? '';
+        if (url.isNotEmpty) {
+          debugPrint('[Watermark] Watermark URL found for $imageId: $url');
+          if (mounted) {
+            try {
+              setState(() {
+                _uploadStatus[imageId] = 'complete';
+              });
+            } catch (e) {
+              debugPrint('[Watermark] Error in setState when watermark found: $e');
+            }
+          }
+          return;
+        }
+        
+        attempts++;
+        if (attempts % 5 == 0) {
+          debugPrint('[Watermark] Still waiting for watermark URL, attempt $attempts/$maxAttempts');
+        }
+      } catch (e, stackTrace) {
+        debugPrint('[Watermark] Error during watermark wait: $e');
+        debugPrint('[Watermark] Stack trace: $stackTrace');
+        // Continue waiting despite error
+        attempts++;
+      }
     }
     
     // Timeout - still show as processing
-    setState(() {
-      _uploadStatus[imageId] = 'processing';
-    });
+    debugPrint('[Watermark] Timeout waiting for watermark URL for: $imageId');
+    if (mounted) {
+      try {
+        setState(() {
+          _uploadStatus[imageId] = 'processing';
+        });
+      } catch (e) {
+        debugPrint('[Watermark] Error in setState on timeout: $e');
+      }
+    }
   }
 
   Future<void> _setPrimary(String imageId) async {
+    if (!mounted) return;
+    
     try {
+      debugPrint('[SetPrimary] Setting primary image: $imageId');
       await _imageService.updateImageMetadata(
         auctionId: widget.auctionId,
         imageId: imageId,
         isPrimary: true,
       );
-    } catch (e) {
+      debugPrint('[SetPrimary] Successfully set primary image: $imageId');
+    } catch (e, stackTrace) {
+      debugPrint('[SetPrimary] Error setting primary: $e');
+      debugPrint('[SetPrimary] Stack trace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -267,12 +410,18 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
   }
 
   Future<void> _deleteImage(String imageId) async {
+    if (!mounted) return;
+    
     try {
+      debugPrint('[Delete] Deleting image: $imageId');
       await _imageService.deleteImage(
         auctionId: widget.auctionId,
         imageId: imageId,
       );
-    } catch (e) {
+      debugPrint('[Delete] Successfully deleted image: $imageId');
+    } catch (e, stackTrace) {
+      debugPrint('[Delete] Error deleting image: $e');
+      debugPrint('[Delete] Stack trace: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
