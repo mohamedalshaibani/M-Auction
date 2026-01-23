@@ -12,6 +12,15 @@ service firebase.storage {
       return request.auth != null && request.auth.uid == userId;
     }
     
+    // Helper functions to avoid reserved names
+    function docExists(path) {
+      return exists(path);
+    }
+    
+    function docGet(path) {
+      return get(path);
+    }
+    
     // KYC uploads - user can only upload to their own kyc/{uid} path
     match /kyc/{userId}/{allPaths=**} {
       // Read: authenticated users can read
@@ -56,8 +65,8 @@ service firebase.storage {
                      // Must be in original folder
                      folder == 'original' &&
                      // Verify ownership via Firestore
-                     exists(/databases/(default)/documents/auctions/$(auctionId)) &&
-                     get(/databases/(default)/documents/auctions/$(auctionId)).data.ownerUid == request.auth.uid &&
+                     docExists(/databases/(default)/documents/auctions/$(auctionId)) &&
+                     docGet(/databases/(default)/documents/auctions/$(auctionId)).data.ownerUid == request.auth.uid &&
                      // File size limit: 5MB
                      request.resource.size < 5 * 1024 * 1024 &&
                      // Only allow image mime types
@@ -69,8 +78,8 @@ service firebase.storage {
       // Delete: only owner can delete original, Cloud Function handles wm deletion
       allow delete: if request.auth != null &&
                       folder == 'original' &&
-                      exists(/databases/(default)/documents/auctions/$(auctionId)) &&
-                      get(/databases/(default)/documents/auctions/$(auctionId)).data.ownerUid == request.auth.uid;
+                      docExists(/databases/(default)/documents/auctions/$(auctionId)) &&
+                      docGet(/databases/(default)/documents/auctions/$(auctionId)).data.ownerUid == request.auth.uid;
     }
   }
 }

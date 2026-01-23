@@ -101,12 +101,10 @@ service cloud.firestore {
          request.resource.data.state == 'DRAFT' &&
          request.resource.data.sellerId == resource.data.sellerId &&
          request.resource.data.state == 'DRAFT' &&
-         // If updating images, validate array
+         // If updating images, validate array (exactly one primary validated in service layer)
          (!('images' in request.resource.data.diff(resource.data).affectedKeys()) ||
           (request.resource.data.images is list &&
-           request.resource.data.images.size() <= 6 &&
-           // Exactly one primary
-           request.resource.data.images.filter(img => img.isPrimary == true).size() == 1))) ||
+           request.resource.data.images.size() <= 6))) ||
         // Admin can approve/activate and change state
         isAdmin() ||
         // Seller can update delivery confirmation

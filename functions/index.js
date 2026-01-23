@@ -1,4 +1,5 @@
 const functions = require('firebase-functions');
+const {onObjectFinalized} = require('firebase-functions/v2/storage');
 const admin = require('firebase-admin');
 const stripeSecretKey = functions.config().stripe?.secret_key || 
                         process.env.STRIPE_SECRET_KEY;
@@ -942,13 +943,11 @@ exports.closeEndedAuctions = functions.pubsub.schedule('every 1 minutes').onRun(
   return null;
 });
 
-// Watermark auction images
-exports.watermarkAuctionImage = functions.storage
-  .object()
-  .onFinalize(async (object) => {
-    const filePath = object.name;
-    const contentType = object.contentType;
-    const bucketName = object.bucket;
+// Watermark auction images (Gen2 Storage trigger)
+exports.watermarkAuctionImage = onObjectFinalized(async (event) => {
+    const filePath = event.data.name;
+    const contentType = event.data.contentType;
+    const bucketName = event.data.bucket;
 
     // Only process images in auctions/{auctionId}/original/ path
     if (!filePath || !filePath.startsWith('auctions/') || !filePath.includes('/original/')) {
