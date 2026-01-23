@@ -40,6 +40,13 @@ class AuctionImageService {
       throw Exception('User must be authenticated');
     }
 
+    // Refresh auth token to ensure it's valid
+    try {
+      await user.getIdToken(true); // Force refresh
+    } catch (e) {
+      debugPrint('Warning: Could not refresh auth token: $e');
+    }
+
     // Verify auction exists and user is owner
     final auctionDoc = await _firestore.collection('auctions').doc(auctionId).get();
     if (!auctionDoc.exists) {
@@ -71,11 +78,14 @@ class AuctionImageService {
       extension = 'webp';
     }
 
-    final path = 'auctions/$auctionId/original/$imageId.$extension';
+    // Sanitize imageId to avoid path issues
+    final sanitizedImageId = imageId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+    final path = 'auctions/$auctionId/original/$sanitizedImageId.$extension';
     
     try {
       debugPrint('Uploading to path: $path, size: $fileSize bytes, contentType: $detectedContentType');
       debugPrint('User UID: ${user.uid}, Auction ID: $auctionId');
+      debugPrint('File path: ${file.path}');
       
       final ref = _storage.ref(path);
       
@@ -86,6 +96,11 @@ class AuctionImageService {
           'auctionId': auctionId,
         },
       );
+      
+      // Verify file exists and is readable
+      if (!await file.exists()) {
+        throw Exception('File does not exist: ${file.path}');
+      }
       
       // Use uploadTask with proper error handling
       final uploadTask = ref.putFile(file, metadata);
@@ -103,6 +118,7 @@ class AuctionImageService {
       return path;
     } on firebase_core.FirebaseException catch (e) {
       debugPrint('Firebase Storage error: code=${e.code}, message=${e.message}');
+      debugPrint('Error details: ${e.toString()}');
       throw Exception('Storage error (${e.code}): ${e.message ?? 'Unknown error'}');
     } catch (e, stackTrace) {
       debugPrint('Upload error: $e');
