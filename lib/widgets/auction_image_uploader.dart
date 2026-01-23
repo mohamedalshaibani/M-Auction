@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_image_service.dart';
@@ -133,25 +134,50 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
       final contentType = await _getContentType(file);
       final fileObj = File(file.path);
       
-      // Upload to Storage
-      await _imageService.uploadImage(
-        auctionId: widget.auctionId,
-        imageId: imageId,
-        file: fileObj,
-        contentType: contentType,
-      );
+      // Verify file exists before upload
+      if (!await fileObj.exists()) {
+        throw Exception('File no longer exists. Please try again.');
+      }
+      
+      // Upload to Storage with error handling
+      String uploadedPath;
+      try {
+        uploadedPath = await _imageService.uploadImage(
+          auctionId: widget.auctionId,
+          imageId: imageId,
+          file: fileObj,
+          contentType: contentType,
+        );
+      } catch (uploadError) {
+        // Prevent app crash - log and show user-friendly error
+        debugPrint('Storage upload error: $uploadError');
+        throw Exception('Failed to upload image. Please check your connection and try again.');
+      }
 
       // Add metadata to Firestore
       final currentImages = await _getCurrentImages();
       final isPrimary = currentImages.isEmpty; // First image is primary
       
-      await _imageService.addImageMetadata(
-        auctionId: widget.auctionId,
-        imageId: imageId,
-        path: 'auctions/${widget.auctionId}/original/$imageId.jpg',
-        order: currentImages.length,
-        isPrimary: isPrimary,
-      );
+      try {
+        await _imageService.addImageMetadata(
+          auctionId: widget.auctionId,
+          imageId: imageId,
+          path: uploadedPath,
+          order: currentImages.length,
+          isPrimary: isPrimary,
+        );
+      } catch (metadataError) {
+        debugPrint('Metadata update error: $metadataError');
+        // Don't fail completely - image is uploaded, metadata can be retried
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Image uploaded but metadata update failed. Please refresh.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
 
       setState(() {
         _uploadStatus[imageId] = 'processing';
@@ -168,10 +194,13 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
       });
       
       if (mounted) {
+        // Show user-friendly error message
+        final errorMessage = e.toString().replaceAll('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Upload failed: $e'),
+            content: Text('Upload failed: $errorMessage'),
             backgroundColor: AppTheme.error,
+            duration: const Duration(seconds: 4),
           ),
         );
       }

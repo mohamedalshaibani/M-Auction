@@ -122,10 +122,8 @@ service cloud.firestore {
       
       // Bids subcollection
       match /bids/{bidId} {
-        // Anyone authenticated can read bids for ACTIVE/ENDED auctions
-        allow read: if request.auth != null && 
-                      (get(/databases/$(database)/documents/auctions/$(auctionId)).data.state == 'ACTIVE' ||
-                       get(/databases/$(database)/documents/auctions/$(auctionId)).data.state == 'ENDED');
+        // Anyone authenticated can read bids (for all auction states)
+        allow read: if request.auth != null;
         
         // Create bid: strict rules
         allow create: if request.auth != null &&

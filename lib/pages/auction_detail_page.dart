@@ -11,6 +11,7 @@ import '../services/contract_service.dart';
 import '../services/payment_service.dart';
 import 'terms_contract_page.dart';
 import 'payment_page.dart';
+import 'edit_draft_auction_page.dart';
 
 class AuctionDetailPage extends StatefulWidget {
   final String auctionId;
@@ -463,6 +464,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         final state = data['state'] as String? ?? 'UNKNOWN';
         final isActive = state == 'ACTIVE';
         final isEnded = state == 'ENDED' || state == 'ENDED_NO_RESPONSE';
+        final isDraft = state == 'DRAFT' || state == 'PENDING_APPROVAL';
         final isSeller = user?.uid == sellerId;
         final isWinner = user?.uid == winnerId;
         final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
@@ -505,6 +507,21 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
             ),
+            actions: [
+              // Edit button for draft auctions
+              if (isDraft && isSeller)
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => EditDraftAuctionPage(auctionId: widget.auctionId),
+                      ),
+                    );
+                  },
+                  tooltip: 'Edit Auction',
+                ),
+            ],
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
