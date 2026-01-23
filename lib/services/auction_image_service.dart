@@ -3,8 +3,8 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart' as firebase_core;
 import 'package:flutter/foundation.dart' show debugPrint;
-import '../firebase_options.dart';
 
 class AuctionImageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -75,8 +75,7 @@ class AuctionImageService {
     
     try {
       debugPrint('Uploading to path: $path, size: $fileSize bytes, contentType: $detectedContentType');
-      debugPrint('Storage bucket: ${_storage.app.options.storageBucket}');
-      debugPrint('User UID: ${user.uid}');
+      debugPrint('User UID: ${user.uid}, Auction ID: $auctionId');
       
       final ref = _storage.ref(path);
       
@@ -88,14 +87,23 @@ class AuctionImageService {
         },
       );
       
-      // Use uploadTask to get better error information
+      // Use uploadTask with proper error handling
       final uploadTask = ref.putFile(file, metadata);
       
-      // Wait for upload to complete
-      final snapshot = await uploadTask;
+      // Wait for upload to complete with timeout
+      final snapshot = await uploadTask.timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          throw Exception('Upload timeout after 60 seconds');
+        },
+      );
+      
       debugPrint('Upload successful: $path, bytesTransferred: ${snapshot.bytesTransferred}');
       
       return path;
+    } on firebase_core.FirebaseException catch (e) {
+      debugPrint('Firebase Storage error: code=${e.code}, message=${e.message}');
+      throw Exception('Storage error (${e.code}): ${e.message ?? 'Unknown error'}');
     } catch (e, stackTrace) {
       debugPrint('Upload error: $e');
       debugPrint('Stack trace: $stackTrace');
