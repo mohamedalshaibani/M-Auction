@@ -54,13 +54,15 @@ service firebase.storage {
       // Read: authenticated users can read watermarked images
       allow read: if isAuthenticated();
       
-      // Write to /original/: only auction owner
+      // Write to /original/: authenticated users (ownership validated in service layer)
+      // We allow authenticated uploads here and validate ownership in the service
       allow write: if request.auth != null &&
                      // Must be in original folder
                      folder == 'original' &&
-                     // Verify ownership via Firestore (using built-in exists/get)
+                     // Verify auction exists and user is owner (check both ownerUid and sellerId for compatibility)
                      exists(/databases/(default)/documents/auctions/$(auctionId)) &&
-                     get(/databases/(default)/documents/auctions/$(auctionId)).data.ownerUid == request.auth.uid &&
+                     (get(/databases/(default)/documents/auctions/$(auctionId)).data.ownerUid == request.auth.uid ||
+                      get(/databases/(default)/documents/auctions/$(auctionId)).data.sellerId == request.auth.uid) &&
                      // File size limit: 5MB
                      request.resource.size < 5 * 1024 * 1024 &&
                      // Only allow image mime types
@@ -73,7 +75,8 @@ service firebase.storage {
       allow delete: if request.auth != null &&
                       folder == 'original' &&
                       exists(/databases/(default)/documents/auctions/$(auctionId)) &&
-                      get(/databases/(default)/documents/auctions/$(auctionId)).data.ownerUid == request.auth.uid;
+                      (get(/databases/(default)/documents/auctions/$(auctionId)).data.ownerUid == request.auth.uid ||
+                       get(/databases/(default)/documents/auctions/$(auctionId)).data.sellerId == request.auth.uid);
     }
   }
 }
