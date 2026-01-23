@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../theme/app_theme.dart';
 import '../services/auction_service.dart';
 
@@ -184,6 +185,10 @@ class _HomePageState extends State<HomePage> {
                 limit: 50,
               ),
               builder: (context, snapshot) {
+                // Debug: print query info
+                if (kDebugMode) {
+                  debugPrint('HomePage query: category=$_selectedCategory, using streamActiveAuctionsFiltered');
+                }
                 if (snapshot.hasError) {
                   return SliverToBoxAdapter(
                     child: Padding(
@@ -225,32 +230,44 @@ class _HomePageState extends State<HomePage> {
                   );
                 }
 
-                // Apply search filter and sorting locally
+                // Apply ALL filtering and sorting locally (no Firestore orderBy or category filter)
                 final searchQuery = _searchController.text.trim().toLowerCase();
                 var filteredDocs = snapshot.data!.docs.where((doc) {
-                  if (searchQuery.isEmpty) return true;
-                  
                   final data = doc.data() as Map<String, dynamic>;
-                  final title = (data['title'] as String? ?? '').toLowerCase();
-                  return title.contains(searchQuery);
+                  
+                  // Category filter (in memory)
+                  if (_selectedCategory != 'All') {
+                    final category = data['category'] as String? ?? '';
+                    if (category != _selectedCategory) {
+                      return false;
+                    }
+                  }
+                  
+                  // Search filter (in memory)
+                  if (searchQuery.isNotEmpty) {
+                    final title = (data['title'] as String? ?? '').toLowerCase();
+                    if (!title.contains(searchQuery)) {
+                      return false;
+                    }
+                  }
+                  
+                  return true;
                 }).toList();
 
-                // Sort by endsAt if category filter is applied (since Firestore query doesn't include orderBy)
-                // This avoids the composite index requirement
-                if (_selectedCategory != 'All') {
-                  filteredDocs.sort((a, b) {
-                    final aData = a.data() as Map<String, dynamic>;
-                    final bData = b.data() as Map<String, dynamic>;
-                    final aEndsAt = aData['endsAt'] as Timestamp?;
-                    final bEndsAt = bData['endsAt'] as Timestamp?;
+                // Always sort by endsAt in memory (null-safe: null endsAt goes last)
+                filteredDocs.sort((a, b) {
+                  final aData = a.data() as Map<String, dynamic>;
+                  final bData = b.data() as Map<String, dynamic>;
+                  final aEndsAt = aData['endsAt'] as Timestamp?;
+                  final bEndsAt = bData['endsAt'] as Timestamp?;
 
-                    if (aEndsAt == null && bEndsAt == null) return 0;
-                    if (aEndsAt == null) return 1;
-                    if (bEndsAt == null) return -1;
+                  // Null endsAt goes last
+                  if (aEndsAt == null && bEndsAt == null) return 0;
+                  if (aEndsAt == null) return 1;
+                  if (bEndsAt == null) return -1;
 
-                    return aEndsAt.compareTo(bEndsAt); // Ascending (ending soonest first)
-                  });
-                }
+                  return aEndsAt.compareTo(bEndsAt); // Ascending (ending soonest first)
+                });
 
                 if (filteredDocs.isEmpty) {
                   return SliverToBoxAdapter(

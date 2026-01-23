@@ -753,26 +753,17 @@ class AuctionService {
         .snapshots();
   }
 
-  // Stream active auctions with category filter and ordering
-  // Note: When category filter is applied, we avoid orderBy to prevent composite index requirement
-  // Sorting by endsAt is done in memory in the UI layer
+  // Stream active auctions - NO orderBy to avoid any index requirements
+  // All filtering (category) and sorting (endsAt) is done in memory in the UI layer
   Stream<QuerySnapshot> streamActiveAuctionsFiltered({
     String? category,
     int limit = 50,
   }) {
-    Query query = _firestore
+    // Simple query with only state filter - no orderBy, no category filter in Firestore
+    // This guarantees no composite index is needed
+    return _firestore
         .collection('auctions')
-        .where('state', isEqualTo: 'ACTIVE');
-
-    if (category != null && category.isNotEmpty && category != 'All') {
-      // When category filter is applied, don't use orderBy to avoid composite index requirement
-      // Sorting will be done in memory in the UI
-      return query.limit(limit).snapshots();
-    }
-
-    // When no category filter, we can use orderBy (single where + orderBy doesn't need composite index)
-    return query
-        .orderBy('endsAt', descending: false) // Ending soonest first
+        .where('state', isEqualTo: 'ACTIVE')
         .limit(limit)
         .snapshots();
   }
