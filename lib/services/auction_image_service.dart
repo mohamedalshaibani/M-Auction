@@ -140,29 +140,36 @@ class AuctionImageService {
       // Small delay to ensure Storage is ready (helps with -1017 errors)
       await Future.delayed(const Duration(milliseconds: 100));
       
-      // Read file as bytes and use putData instead of putFile
-      // This can help avoid -1017 errors on iOS
-      // Note: For very large files, consider streaming or compression
-      debugPrint('[AuctionImageService] Reading file as bytes...');
-      final fileBytes = await file.readAsBytes();
-      debugPrint('[AuctionImageService] File read as bytes: ${fileBytes.length} bytes');
-      
-      // Use uploadTask with proper error handling
-      debugPrint('[AuctionImageService] Starting Storage upload...');
-      final uploadTask = ref.putData(fileBytes, metadata);
-      
-      // Wait for upload to complete with timeout
-      final snapshot = await uploadTask.timeout(
-        const Duration(seconds: 60),
-        onTimeout: () {
-          debugPrint('[AuctionImageService] Upload timeout after 60 seconds');
-          throw Exception('Upload timeout after 60 seconds');
-        },
-      );
-      
-      debugPrint('[AuctionImageService] Upload successful: $path, bytesTransferred: ${snapshot.bytesTransferred}');
-      
-      return path;
+      // Try putFile first (stream from disk, avoids OOM). On iOS, putFile can fail with
+      // -1017; fall back to putData so uploads still succeed.
+      debugPrint('[AuctionImageService] Starting Storage upload (putFile)...');
+      try {
+        final uploadTask = ref.putFile(file, metadata);
+        final snapshot = await uploadTask.timeout(
+          const Duration(seconds: 60),
+          onTimeout: () {
+            debugPrint('[AuctionImageService] Upload timeout after 60 seconds');
+            throw Exception('Upload timeout after 60 seconds');
+          },
+        );
+        debugPrint('[AuctionImageService] Upload successful (putFile): $path, bytesTransferred: ${snapshot.bytesTransferred}');
+        return path;
+      } on firebase_core.FirebaseException catch (e, stackTrace) {
+        debugPrint('[AuctionImageService] putFile failed: code=${e.code}, message=${e.message}. Retrying with putData...');
+        debugPrint('[AuctionImageService] Stack trace: $stackTrace');
+        final fileBytes = await file.readAsBytes();
+        debugPrint('[AuctionImageService] File read as bytes: ${fileBytes.length} bytes');
+        final uploadTask = ref.putData(fileBytes, metadata);
+        final snapshot = await uploadTask.timeout(
+          const Duration(seconds: 60),
+          onTimeout: () {
+            debugPrint('[AuctionImageService] putData upload timeout after 60 seconds');
+            throw Exception('Upload timeout after 60 seconds');
+          },
+        );
+        debugPrint('[AuctionImageService] Upload successful (putData fallback): $path, bytesTransferred: ${snapshot.bytesTransferred}');
+        return path;
+      }
     } on firebase_core.FirebaseException catch (e, stackTrace) {
       debugPrint('[AuctionImageService] Firebase Storage error: code=${e.code}, message=${e.message}');
       debugPrint('[AuctionImageService] Error details: ${e.toString()}');
