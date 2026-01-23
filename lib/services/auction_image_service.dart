@@ -9,8 +9,16 @@ import 'package:flutter/foundation.dart' show debugPrint;
 class AuctionImageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Get Storage instance - use default instance (bucket is auto-configured)
-  FirebaseStorage get _storage => FirebaseStorage.instance;
+  // Get Storage instance - use default instance (bucket is auto-configured from FirebaseOptions)
+  // The bucket is automatically set from Firebase.initializeApp() options
+  FirebaseStorage get _storage {
+    try {
+      return FirebaseStorage.instance;
+    } catch (e) {
+      debugPrint('Error getting Storage instance: $e');
+      rethrow;
+    }
+  }
 
   // Validate image file
   bool validateImage({
@@ -101,6 +109,9 @@ class AuctionImageService {
       if (!await file.exists()) {
         throw Exception('File does not exist: ${file.path}');
       }
+      
+      // Small delay to ensure Storage is ready (helps with -1017 errors)
+      await Future.delayed(const Duration(milliseconds: 100));
       
       // Use uploadTask with proper error handling
       final uploadTask = ref.putFile(file, metadata);
