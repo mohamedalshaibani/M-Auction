@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_image_service.dart';
@@ -167,7 +166,6 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
           isPrimary: isPrimary,
         );
       } catch (metadataError) {
-        debugPrint('Metadata update error: $metadataError');
         // Don't fail completely - image is uploaded, metadata can be retried
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
