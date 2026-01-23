@@ -16,8 +16,8 @@ service cloud.firestore {
     
     // Users collection
     match /users/{uid} {
-      // Users can read their own user doc
-      allow read: if isOwner(uid);
+      // Users can read their own user doc, admins can read all
+      allow read: if isOwner(uid) || isAdmin();
       
       // Users can create their own user doc (during registration)
       allow create: if isOwner(uid) && 
@@ -67,8 +67,8 @@ service cloud.firestore {
     
     // Wallets collection
     match /wallets/{uid} {
-      // Users can read their own wallet
-      allow read: if isOwner(uid);
+      // Users can read their own wallet, admins can read all
+      allow read: if isOwner(uid) || isAdmin();
       
       // Writes only through server/admin functions
       allow write: if false; // Block all client writes - use Cloud Functions or admin SDK

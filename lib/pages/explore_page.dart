@@ -53,7 +53,20 @@ class _ExplorePageState extends State<ExplorePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Explore'),
+        title: Row(
+          children: [
+            SizedBox(
+              width: 48,
+              height: 28,
+              child: Image.asset(
+                'assets/branding/logo_light.png',
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 16),
+            const Text('Explore'),
+          ],
+        ),
       ),
       body: SafeArea(
         child: CustomScrollView(
