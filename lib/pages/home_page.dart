@@ -225,15 +225,32 @@ class _HomePageState extends State<HomePage> {
                   );
                 }
 
-                // Apply search filter locally
+                // Apply search filter and sorting locally
                 final searchQuery = _searchController.text.trim().toLowerCase();
-                final filteredDocs = snapshot.data!.docs.where((doc) {
+                var filteredDocs = snapshot.data!.docs.where((doc) {
                   if (searchQuery.isEmpty) return true;
                   
                   final data = doc.data() as Map<String, dynamic>;
                   final title = (data['title'] as String? ?? '').toLowerCase();
                   return title.contains(searchQuery);
                 }).toList();
+
+                // Sort by endsAt if category filter is applied (since Firestore query doesn't include orderBy)
+                // This avoids the composite index requirement
+                if (_selectedCategory != 'All') {
+                  filteredDocs.sort((a, b) {
+                    final aData = a.data() as Map<String, dynamic>;
+                    final bData = b.data() as Map<String, dynamic>;
+                    final aEndsAt = aData['endsAt'] as Timestamp?;
+                    final bEndsAt = bData['endsAt'] as Timestamp?;
+
+                    if (aEndsAt == null && bEndsAt == null) return 0;
+                    if (aEndsAt == null) return 1;
+                    if (bEndsAt == null) return -1;
+
+                    return aEndsAt.compareTo(bEndsAt); // Ascending (ending soonest first)
+                  });
+                }
 
                 if (filteredDocs.isEmpty) {
                   return SliverToBoxAdapter(

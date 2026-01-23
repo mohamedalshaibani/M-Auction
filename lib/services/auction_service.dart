@@ -754,6 +754,8 @@ class AuctionService {
   }
 
   // Stream active auctions with category filter and ordering
+  // Note: When category filter is applied, we avoid orderBy to prevent composite index requirement
+  // Sorting by endsAt is done in memory in the UI layer
   Stream<QuerySnapshot> streamActiveAuctionsFiltered({
     String? category,
     int limit = 50,
@@ -763,9 +765,12 @@ class AuctionService {
         .where('state', isEqualTo: 'ACTIVE');
 
     if (category != null && category.isNotEmpty && category != 'All') {
-      query = query.where('category', isEqualTo: category);
+      // When category filter is applied, don't use orderBy to avoid composite index requirement
+      // Sorting will be done in memory in the UI
+      return query.limit(limit).snapshots();
     }
 
+    // When no category filter, we can use orderBy (single where + orderBy doesn't need composite index)
     return query
         .orderBy('endsAt', descending: false) // Ending soonest first
         .limit(limit)
