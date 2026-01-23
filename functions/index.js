@@ -1,5 +1,4 @@
 const functions = require('firebase-functions');
-const {onObjectFinalized} = require('firebase-functions/v2/storage');
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const {defineString} = require('firebase-functions/params');
 const admin = require('firebase-admin');
@@ -971,11 +970,15 @@ exports.closeEndedAuctions = onSchedule('every 1 minutes', async (event) => {
   return null;
 });
 
-// Watermark auction images (Gen2 Storage trigger)
-exports.watermarkAuctionImage = onObjectFinalized(async (event) => {
-    const filePath = event.data.name;
-    const contentType = event.data.contentType;
-    const bucketName = event.data.bucket;
+// Watermark auction images (1st Gen Storage trigger)
+exports.watermarkAuctionImage = functions
+  .region('us-central1')
+  .storage
+  .object()
+  .onFinalize(async (object) => {
+    const filePath = object.name;
+    const contentType = object.contentType;
+    const bucketName = object.bucket;
 
     // Only process images in auctions/{auctionId}/original/ path
     if (!filePath || !filePath.startsWith('auctions/') || !filePath.includes('/original/')) {
