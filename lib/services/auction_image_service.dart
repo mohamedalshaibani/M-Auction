@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,7 +9,10 @@ import 'package:flutter/foundation.dart' show debugPrint;
 
 class AuctionImageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
+  /// Serializes addImageMetadata so concurrent calls don't race on get+update (last-write-wins).
+  static Future<void> _addImageMetadataMutex = Future<void>.value();
+
   // Get Storage instance - use default instance (bucket is auto-configured from FirebaseOptions)
   // The bucket is automatically set from Firebase.initializeApp() options
   // For iOS, we need to ensure the bucket is properly configured
@@ -223,7 +227,12 @@ class AuctionImageService {
   }) async {
     debugPrint('[AuctionImageService] Adding image metadata for: $imageId');
     
+    final prev = _addImageMetadataMutex;
+    final completer = Completer<void>();
+    _addImageMetadataMutex = completer.future;
+
     try {
+      await prev;
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         debugPrint('[AuctionImageService] User not authenticated for metadata update');
@@ -231,63 +240,57 @@ class AuctionImageService {
       }
 
       final auctionRef = _firestore.collection('auctions').doc(auctionId);
+
+      // Use get + update instead of runTransaction to avoid iOS "Lost connection" crashes
+      // that occur during Firestore transactions (transaction.get/update path).
+      // Serialized via _addImageMetadataMutex so concurrent adds don't race (last-write-wins).
+      debugPrint('[AuctionImageService] Fetching auction doc for metadata update');
+      final auctionDoc = await auctionRef.get();
+      if (!auctionDoc.exists) {
+        debugPrint('[AuctionImageService] Auction not found: $auctionId');
+        throw Exception('Auction not found');
+      }
+
+      final data = auctionDoc.data()!;
+      final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
       
-      // Use transaction to ensure atomic update
-      debugPrint('[AuctionImageService] Starting Firestore transaction for metadata');
-      await _firestore.runTransaction((transaction) async {
-        final auctionDoc = await transaction.get(auctionRef);
-        if (!auctionDoc.exists) {
-          debugPrint('[AuctionImageService] Auction not found in transaction: $auctionId');
-          throw Exception('Auction not found');
+      if (ownerUid != user.uid) {
+        debugPrint('[AuctionImageService] Ownership verification failed. Owner: $ownerUid, User: ${user.uid}');
+        throw Exception('Only auction owner can add images');
+      }
+
+      final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
+      
+      debugPrint('[AuctionImageService] Current images count: ${images.length}');
+      
+      if (images.length >= 6) {
+        debugPrint('[AuctionImageService] Maximum 6 images already reached');
+        throw Exception('Maximum 6 images allowed');
+      }
+
+      final willBePrimary = images.isEmpty || isPrimary;
+      debugPrint('[AuctionImageService] Will be primary: $willBePrimary');
+      
+      if (willBePrimary) {
+        for (var img in images) {
+          img['isPrimary'] = false;
         }
+      }
 
-        final data = auctionDoc.data()!;
-        final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
-        
-        // Verify ownership
-        if (ownerUid != user.uid) {
-          debugPrint('[AuctionImageService] Ownership verification failed. Owner: $ownerUid, User: ${user.uid}');
-          throw Exception('Only auction owner can add images');
-        }
+      images.add({
+        'id': imageId,
+        'path': path,
+        'wmPath': '',
+        'url': '',
+        'isPrimary': willBePrimary,
+        'order': order,
+        'uploadedAt': FieldValue.serverTimestamp(),
+      });
 
-        final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
-        
-        debugPrint('[AuctionImageService] Current images count: ${images.length}');
-        
-        // Check max 6 images
-        if (images.length >= 6) {
-          debugPrint('[AuctionImageService] Maximum 6 images already reached');
-          throw Exception('Maximum 6 images allowed');
-        }
-
-        // If this is the first image, set as primary
-        final willBePrimary = images.isEmpty || isPrimary;
-        
-        debugPrint('[AuctionImageService] Will be primary: $willBePrimary');
-        
-        // If setting this as primary, unset others
-        if (willBePrimary) {
-          for (var img in images) {
-            img['isPrimary'] = false;
-          }
-        }
-
-        // Add new image
-        images.add({
-          'id': imageId,
-          'path': path,
-          'wmPath': '', // Will be set by Cloud Function
-          'url': '', // Will be set by Cloud Function
-          'isPrimary': willBePrimary,
-          'order': order,
-          'uploadedAt': FieldValue.serverTimestamp(),
-        });
-
-        debugPrint('[AuctionImageService] Updating Firestore with ${images.length} images');
-        transaction.update(auctionRef, {
-          'images': images,
-          'ownerUid': ownerUid, // Ensure ownerUid is set
-        });
+      debugPrint('[AuctionImageService] Updating Firestore with ${images.length} images');
+      await auctionRef.update({
+        'images': images,
+        'ownerUid': ownerUid,
       });
       
       debugPrint('[AuctionImageService] Image metadata added successfully');
@@ -295,6 +298,8 @@ class AuctionImageService {
       debugPrint('[AuctionImageService] Error adding image metadata: $e');
       debugPrint('[AuctionImageService] Stack trace: $stackTrace');
       rethrow;
+    } finally {
+      completer.complete();
     }
   }
 
