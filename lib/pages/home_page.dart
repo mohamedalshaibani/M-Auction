@@ -15,8 +15,9 @@ class _HomePageState extends State<HomePage> {
   final _searchController = TextEditingController();
   final _auctionService = AuctionService();
   String _selectedCategory = 'All';
+  String _selectedFilter = 'Active'; // 'Active' or 'Ended'
   
-  // Available categories (can be extracted from Firestore if needed)
+  // Available categories
   final List<String> _categories = ['All', 'Bags', 'Watches', 'Jewelry', 'Art'];
 
   @override
@@ -45,33 +46,8 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  String _getStatusBadge(String state, Timestamp? endsAt) {
-    if (state != 'ACTIVE') return state.toLowerCase();
-    
-    if (endsAt == null) return 'active';
-    
-    final now = DateTime.now();
-    final endDate = endsAt.toDate();
-    final difference = endDate.difference(now);
-    
-    if (difference.isNegative) {
-      return 'ended';
-    } else if (difference.inHours < 24) {
-      return 'ending_soon';
-    } else {
-      return 'active';
-    }
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'active':
-        return AppTheme.success;
-      case 'ending_soon':
-        return AppTheme.warning;
-      default:
-        return AppTheme.textSecondary;
-    }
+  bool _isEndedState(String state) {
+    return state == 'ENDED' || state == 'ENDED_NO_RESPONSE';
   }
 
   @override
@@ -135,6 +111,49 @@ class _HomePageState extends State<HomePage> {
               child: SizedBox(height: 20),
             ),
             
+            // Active/Ended filter toggle
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _FilterToggle(
+                          label: 'Active',
+                          isSelected: _selectedFilter == 'Active',
+                          onTap: () {
+                            setState(() {
+                              _selectedFilter = 'Active';
+                            });
+                          },
+                        ),
+                      ),
+                      Expanded(
+                        child: _FilterToggle(
+                          label: 'Ended',
+                          isSelected: _selectedFilter == 'Ended',
+                          onTap: () {
+                            setState(() {
+                              _selectedFilter = 'Ended';
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 16),
+            ),
+            
             // Category chips
             SliverToBoxAdapter(
               child: SizedBox(
@@ -180,25 +199,48 @@ class _HomePageState extends State<HomePage> {
             
             // Auction cards list from Firestore
             StreamBuilder<QuerySnapshot>(
-              stream: _auctionService.streamActiveAuctionsFiltered(
-                category: _selectedCategory == 'All' ? null : _selectedCategory,
-                limit: 50,
-              ),
+              stream: _auctionService.streamAllAuctions(limit: 50),
               builder: (context, snapshot) {
-                // Debug: print query info
                 if (kDebugMode) {
-                  debugPrint('HomePage query: category=$_selectedCategory, using streamActiveAuctionsFiltered');
+                  debugPrint('HomePage: filter=$_selectedFilter, category=$_selectedCategory');
                 }
+
                 if (snapshot.hasError) {
                   return SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(40),
                       child: Center(
-                        child: Text(
-                          'Error loading auctions: ${snapshot.error}',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.error,
-                              ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 48,
+                              color: AppTheme.error,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Error loading auctions',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppTheme.error,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${snapshot.error}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {}); // Retry by rebuilding
+                              },
+                              child: const Text('Retry'),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -206,10 +248,11 @@ class _HomePageState extends State<HomePage> {
                 }
 
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(child: CircularProgressIndicator()),
+                  // Skeleton loading cards
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => _SkeletonCard(),
+                      childCount: 3,
                     ),
                   );
                 }
@@ -219,21 +262,43 @@ class _HomePageState extends State<HomePage> {
                     child: Padding(
                       padding: const EdgeInsets.all(40),
                       child: Center(
-                        child: Text(
-                          'No active auctions available',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.inbox_outlined,
+                              size: 64,
+                              color: AppTheme.textTertiary,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _selectedFilter == 'Active'
+                                  ? 'No active auctions yet'
+                                  : 'No ended auctions yet',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   );
                 }
 
-                // Apply ALL filtering and sorting locally (no Firestore orderBy or category filter)
+                // Apply ALL filtering and sorting locally
                 final searchQuery = _searchController.text.trim().toLowerCase();
                 var filteredDocs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
+                  final state = data['state'] as String? ?? 'UNKNOWN';
+                  
+                  // State filter (Active or Ended)
+                  if (_selectedFilter == 'Active') {
+                    if (state != 'ACTIVE') return false;
+                  } else {
+                    // Ended filter
+                    if (!_isEndedState(state)) return false;
+                  }
                   
                   // Category filter (in memory)
                   if (_selectedCategory != 'All') {
@@ -254,7 +319,7 @@ class _HomePageState extends State<HomePage> {
                   return true;
                 }).toList();
 
-                // Always sort by endsAt in memory (null-safe: null endsAt goes last)
+                // Sort by endsAt in memory
                 filteredDocs.sort((a, b) {
                   final aData = a.data() as Map<String, dynamic>;
                   final bData = b.data() as Map<String, dynamic>;
@@ -266,7 +331,13 @@ class _HomePageState extends State<HomePage> {
                   if (aEndsAt == null) return 1;
                   if (bEndsAt == null) return -1;
 
-                  return aEndsAt.compareTo(bEndsAt); // Ascending (ending soonest first)
+                  if (_selectedFilter == 'Active') {
+                    // Active: ascending (ending soonest first)
+                    return aEndsAt.compareTo(bEndsAt);
+                  } else {
+                    // Ended: descending (most recently ended first)
+                    return bEndsAt.compareTo(aEndsAt);
+                  }
                 });
 
                 if (filteredDocs.isEmpty) {
@@ -274,11 +345,22 @@ class _HomePageState extends State<HomePage> {
                     child: Padding(
                       padding: const EdgeInsets.all(40),
                       child: Center(
-                        child: Text(
-                          'No auctions match your search',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.search_off,
+                              size: 64,
+                              color: AppTheme.textTertiary,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No auctions match your filters',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -297,22 +379,23 @@ class _HomePageState extends State<HomePage> {
                       final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
                       final endsAt = data['endsAt'] as Timestamp?;
                       final state = data['state'] as String? ?? 'UNKNOWN';
+                      final category = data['category'] as String? ?? '';
                       final images = data['images'] as List<dynamic>?;
                       final imageUrl = images != null && images.isNotEmpty
                           ? images[0] as String?
                           : null;
                       
-                      final timeLeft = _formatTimeLeft(endsAt);
-                      final status = _getStatusBadge(state, endsAt);
+                      final isEnded = _isEndedState(state);
+                      final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);
                       
                       return _AuctionCard(
                         auctionId: auctionId,
                         title: title,
                         currentPrice: currentPrice,
                         timeLeft: timeLeft,
-                        status: status,
+                        category: category,
                         imageUrl: imageUrl,
-                        statusColor: _getStatusColor(status),
+                        isEnded: isEnded,
                       );
                     },
                     childCount: filteredDocs.length,
@@ -331,23 +414,120 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+class _FilterToggle extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _FilterToggle({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: isSelected ? Colors.white : AppTheme.textSecondary,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Image skeleton
+          Container(
+            width: double.infinity,
+            height: 200,
+            decoration: BoxDecoration(
+              color: AppTheme.backgroundGrey,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(14),
+                topRight: Radius.circular(14),
+              ),
+            ),
+          ),
+          // Content skeleton
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: 120,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: 100,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AuctionCard extends StatelessWidget {
   final String auctionId;
   final String title;
   final double currentPrice;
   final String timeLeft;
-  final String status;
+  final String category;
   final String? imageUrl;
-  final Color statusColor;
+  final bool isEnded;
 
   const _AuctionCard({
     required this.auctionId,
     required this.title,
     required this.currentPrice,
     required this.timeLeft,
-    required this.status,
+    required this.category,
     this.imageUrl,
-    required this.statusColor,
+    required this.isEnded,
   });
 
   @override
@@ -362,118 +542,161 @@ class _AuctionCard extends StatelessWidget {
           );
         },
         borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Image or placeholder
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: AppTheme.backgroundGrey,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: imageUrl != null && imageUrl!.isNotEmpty
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: Image.network(
-                          imageUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Icon(
-                              Icons.image_outlined,
-                              color: AppTheme.textTertiary,
-                              size: 40,
-                            );
-                          },
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                                strokeWidth: 2,
-                              ),
-                            );
-                          },
-                        ),
-                      )
-                    : Icon(
-                        Icons.image_outlined,
-                        color: AppTheme.textTertiary,
-                        size: 40,
-                      ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Full-width image
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(14),
+                topRight: Radius.circular(14),
               ),
-              const SizedBox(width: 16),
-              // Content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text(
-                          'AED ${currentPrice.toStringAsFixed(0)}',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                color: AppTheme.primaryBlue,
-                                fontWeight: FontWeight.bold,
-                              ),
+              child: Container(
+                width: double.infinity,
+                height: 200,
+                color: AppTheme.backgroundGrey,
+                child: imageUrl != null && imageUrl!.isNotEmpty
+                    ? Image.network(
+                        imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return _ImagePlaceholder();
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryBlue),
+                            ),
+                          );
+                        },
+                      )
+                    : _ImagePlaceholder(),
+              ),
+            ),
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 12),
+                  // Price row
+                  Row(
+                    children: [
+                      Text(
+                        'AED ',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                      ),
+                      Text(
+                        currentPrice.toStringAsFixed(0),
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              color: AppTheme.primaryBlue,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Time/status row
+                  Row(
+                    children: [
+                      if (!isEnded) ...[
                         Icon(
                           Icons.access_time,
-                          size: 14,
+                          size: 16,
                           color: AppTheme.textSecondary,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          timeLeft,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                        ),
-                        const Spacer(),
+                      ],
+                      Text(
+                        timeLeft,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                      ),
+                      const Spacer(),
+                      // Category badge
+                      if (category.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.1),
+                            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppTheme.primaryBlue.withValues(alpha: 0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            category,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: AppTheme.primaryBlue,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                        ),
+                      if (isEnded) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.textSecondary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            status.toUpperCase(),
+                            'ENDED',
                             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  color: statusColor,
+                                  color: AppTheme.textSecondary,
                                   fontWeight: FontWeight.w600,
                                 ),
                           ),
                         ),
                       ],
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ImagePlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.backgroundGrey,
+      child: Center(
+        child: Icon(
+          Icons.image_outlined,
+          size: 48,
+          color: AppTheme.textTertiary,
         ),
       ),
     );

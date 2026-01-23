@@ -753,17 +753,12 @@ class AuctionService {
         .snapshots();
   }
 
-  // Stream active auctions - NO orderBy to avoid any index requirements
-  // All filtering (category) and sorting (endsAt) is done in memory in the UI layer
-  Stream<QuerySnapshot> streamActiveAuctionsFiltered({
-    String? category,
-    int limit = 50,
-  }) {
-    // Simple query with only state filter - no orderBy, no category filter in Firestore
-    // This guarantees no composite index is needed
+  // Stream all auctions - minimal query to avoid any index requirements
+  // All filtering (state, category) and sorting (endsAt) is done in memory in the UI layer
+  Stream<QuerySnapshot> streamAllAuctions({int limit = 50}) {
+    // Minimal query: no where clauses, no orderBy - guarantees no composite index needed
     return _firestore
         .collection('auctions')
-        .where('state', isEqualTo: 'ACTIVE')
         .limit(limit)
         .snapshots();
   }
