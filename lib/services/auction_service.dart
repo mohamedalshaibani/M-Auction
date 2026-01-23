@@ -32,6 +32,7 @@ class AuctionService {
     final auctionRef = _firestore.collection('auctions').doc();
     await auctionRef.set({
       'sellerId': sellerId,
+      'ownerUid': sellerId, // Set ownerUid for image security
       'category': category,
       'brand': brand,
       'title': title,

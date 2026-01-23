@@ -382,10 +382,22 @@ class _HomePageState extends State<HomePage> {
                       final endsAt = data['endsAt'] as Timestamp?;
                       final state = data['state'] as String? ?? 'UNKNOWN';
                       final category = data['category'] as String? ?? '';
+                      // Get primary image URL from images array
                       final images = data['images'] as List<dynamic>?;
-                      final imageUrl = images != null && images.isNotEmpty
-                          ? images[0] as String?
-                          : null;
+                      String? imageUrl;
+                      if (images != null && images.isNotEmpty) {
+                        // Find primary image, or use first image
+                        final primaryImage = images.firstWhere(
+                          (img) => img is Map && (img['isPrimary'] == true),
+                          orElse: () => images.first,
+                        );
+                        if (primaryImage is Map) {
+                          imageUrl = primaryImage['url'] as String?;
+                        } else if (primaryImage is String) {
+                          // Legacy format: array of strings
+                          imageUrl = primaryImage;
+                        }
+                      }
                       
                       final isEnded = _isEndedState(state);
                       final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);

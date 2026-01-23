@@ -3,9 +3,12 @@ const admin = require('firebase-admin');
 const stripeSecretKey = functions.config().stripe?.secret_key || 
                         process.env.STRIPE_SECRET_KEY;
 const stripe = require('stripe')(stripeSecretKey);
+const {Storage} = require('@google-cloud/storage');
+const sharp = require('sharp');
 
 admin.initializeApp();
 const db = admin.firestore();
+const storage = new Storage();
 
 // Create PaymentIntent
 exports.createPaymentIntent = functions.https.onCall(async (data, context) => {
@@ -938,3 +941,150 @@ exports.closeEndedAuctions = functions.pubsub.schedule('every 1 minutes').onRun(
 
   return null;
 });
+
+// Watermark auction images
+exports.watermarkAuctionImage = functions.storage
+  .object()
+  .onFinalize(async (object) => {
+    const filePath = object.name;
+    const contentType = object.contentType;
+    const bucketName = object.bucket;
+
+    // Only process images in auctions/{auctionId}/original/ path
+    if (!filePath || !filePath.startsWith('auctions/') || !filePath.includes('/original/')) {
+      console.log('Skipping non-auction image:', filePath);
+      return null;
+    }
+
+    // Validate content type
+    if (!contentType || !contentType.startsWith('image/')) {
+      console.log('Invalid content type, deleting:', filePath);
+      await storage.bucket(bucketName).file(filePath).delete();
+      return null;
+    }
+
+    // Validate file size (5MB max)
+    const file = storage.bucket(bucketName).file(filePath);
+    const [fileMetadata] = await file.getMetadata();
+    const size = parseInt(fileMetadata.size || '0');
+    
+    if (size > 5 * 1024 * 1024) {
+      console.log('File too large, deleting:', filePath);
+      await file.delete();
+      return null;
+    }
+
+    // Parse auctionId and imageId from path
+    // Path format: auctions/{auctionId}/original/{imageId}.jpg
+    const pathParts = filePath.split('/');
+    if (pathParts.length !== 4 || pathParts[0] !== 'auctions' || pathParts[2] !== 'original') {
+      console.log('Invalid path format:', filePath);
+      return null;
+    }
+
+    const auctionId = pathParts[1];
+    const imageId = pathParts[3].replace(/\.(jpg|jpeg|png|webp)$/i, '');
+
+    console.log('Processing watermark for:', {auctionId, imageId, filePath});
+
+    try {
+      // Download original image
+      const [originalBuffer] = await file.download();
+
+      // Process with sharp: resize, strip EXIF, add watermark
+      const maxWidth = 1600;
+      let processedImage = sharp(originalBuffer)
+        .resize(maxWidth, null, {
+          withoutEnlargement: true,
+          fit: 'inside',
+        })
+        .jpeg({quality: 85, mozjpeg: true})
+        .removeAlpha();
+
+      // Get image dimensions for watermark placement
+      const imageMetadata = await processedImage.metadata();
+      const width = imageMetadata.width || 1600;
+      const height = imageMetadata.height || 1200;
+
+      // Create watermark text SVG
+      const watermarkText = 'M Auction';
+      const fontSize = Math.max(24, Math.min(width, height) * 0.03); // 3% of smaller dimension
+      const watermarkSvg = `
+        <svg width="${width}" height="${height}">
+          <text
+            x="${width - 20}"
+            y="${height - 20}"
+            font-family="Arial, sans-serif"
+            font-size="${fontSize}"
+            font-weight="bold"
+            fill="white"
+            opacity="0.15"
+            text-anchor="end"
+            dominant-baseline="bottom"
+          >${watermarkText}</text>
+        </svg>
+      `;
+
+      // Composite watermark
+      const watermarkBuffer = Buffer.from(watermarkSvg);
+      processedImage = processedImage.composite([
+        {
+          input: watermarkBuffer,
+          blend: 'over',
+        },
+      ]);
+
+      // Get processed image buffer
+      const watermarkedBuffer = await processedImage.toBuffer();
+
+      // Upload watermarked image
+      const wmPath = `auctions/${auctionId}/wm/${imageId}.jpg`;
+      const wmFile = storage.bucket(bucketName).file(wmPath);
+      
+      await wmFile.save(watermarkedBuffer, {
+        metadata: {
+          contentType: 'image/jpeg',
+        },
+      });
+
+      // Make public or get signed URL
+      await wmFile.makePublic();
+      const wmUrl = `https://storage.googleapis.com/${bucketName}/${wmPath}`;
+
+      // Update Firestore with watermark path and URL
+      const auctionRef = db.collection('auctions').doc(auctionId);
+      const auctionDoc = await auctionRef.get();
+
+      if (!auctionDoc.exists) {
+        console.log('Auction not found:', auctionId);
+        return null;
+      }
+
+      const auctionData = auctionDoc.data();
+      const images = Array.isArray(auctionData.images) ? [...auctionData.images] : [];
+
+      // Find and update image metadata
+      const imageIndex = images.findIndex((img) => img.id === imageId);
+      if (imageIndex >= 0) {
+        images[imageIndex] = {
+          ...images[imageIndex],
+          wmPath: wmPath,
+          url: wmUrl,
+        };
+
+        await auctionRef.update({
+          images: images,
+        });
+
+        console.log('Watermark complete:', {auctionId, imageId, wmUrl});
+      } else {
+        console.log('Image metadata not found in Firestore:', imageId);
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error watermarking image:', error);
+      // Don't throw - allow retry
+      return null;
+    }
+  });

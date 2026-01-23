@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
+import '../widgets/auction_image_uploader.dart';
+import '../theme/app_theme.dart';
 
 class SellCreateAuctionPage extends StatefulWidget {
   const SellCreateAuctionPage({super.key});
@@ -22,6 +24,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   String _selectedCategory = 'bags';
   String? _selectedBrand;
   int? _selectedDurationDays;
+  String? _auctionId; // Store auctionId for image upload
 
   List<String> _bagBrands = [];
   List<String> _watchBrands = [];
@@ -67,6 +70,34 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
     _itemIdentifierController.dispose();
     _startPriceController.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitForApproval() async {
+    if (_auctionId == null) {
+      setState(() => _error = 'Please create draft first');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await _auctionService.submitForApproval(_auctionId!);
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Auction submitted for approval')),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Error submitting: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -126,6 +157,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
     try {
       final startPrice = double.parse(_startPriceController.text);
 
+      // Create draft auction first (needed for image upload)
       final auctionId = await _auctionService.createDraftAuction(
         sellerId: user.uid,
         category: _selectedCategory,
@@ -138,14 +170,22 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
         durationDays: _selectedDurationDays!,
       );
 
-      await _auctionService.submitForApproval(auctionId);
+      setState(() {
+        _auctionId = auctionId;
+      });
 
+      // Show success and allow user to add images before submitting
       if (mounted) {
-        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Auction submitted for approval')),
+          const SnackBar(
+            content: Text('Draft created! Add images, then submit for approval.'),
+            duration: Duration(seconds: 3),
+          ),
         );
       }
+      
+      // Don't auto-submit - let user add images first
+      // User can submit manually after adding images
     } catch (e) {
       setState(() {
         _error = 'Error creating auction: $e';
@@ -273,6 +313,37 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
                 setState(() => _selectedDurationDays = value);
               },
             ),
+            const SizedBox(height: 24),
+            // Image uploader (create draft first if needed)
+            if (_auctionId != null)
+              AuctionImageUploader(
+                auctionId: _auctionId!,
+                isDraft: true,
+              )
+            else
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Images',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Create draft auction first to upload images',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (_error != null) ...[
               const SizedBox(height: 16),
               Text(
@@ -281,16 +352,28 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
               ),
             ],
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _submit,
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Create & Submit for Approval'),
-            ),
+            if (_auctionId == null)
+              ElevatedButton(
+                onPressed: _isLoading ? null : _submit,
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Create Draft'),
+              )
+            else
+              ElevatedButton(
+                onPressed: _isLoading ? null : _submitForApproval,
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Submit for Approval'),
+              ),
           ],
         ),
       ),

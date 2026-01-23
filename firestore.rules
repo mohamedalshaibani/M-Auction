@@ -85,16 +85,28 @@ service cloud.firestore {
       // Create: Only seller can create DRAFT auctions, and sellerId must match auth.uid
       allow create: if request.auth != null &&
                       request.resource.data.sellerId == request.auth.uid &&
-                      request.resource.data.state == 'DRAFT';
+                      request.resource.data.ownerUid == request.auth.uid &&
+                      request.resource.data.state == 'DRAFT' &&
+                      // Validate images array if present
+                      (!('images' in request.resource.data) ||
+                       (request.resource.data.images is list &&
+                        request.resource.data.images.size() <= 6));
       
       // Update: Complex rules
       allow update: if request.auth != null && (
         // Seller can update their own DRAFT auctions (but not state transitions)
         (resource.data.sellerId == request.auth.uid && 
+         (resource.data.ownerUid == request.auth.uid || resource.data.ownerUid == null) &&
          resource.data.state == 'DRAFT' &&
          request.resource.data.state == 'DRAFT' &&
          request.resource.data.sellerId == resource.data.sellerId &&
-         request.resource.data.state == 'DRAFT') ||
+         request.resource.data.state == 'DRAFT' &&
+         // If updating images, validate array
+         (!('images' in request.resource.data.diff(resource.data).affectedKeys()) ||
+          (request.resource.data.images is list &&
+           request.resource.data.images.size() <= 6 &&
+           // Exactly one primary
+           request.resource.data.images.filter(img => img.isPrimary == true).size() == 1))) ||
         // Admin can approve/activate and change state
         isAdmin() ||
         // Seller can update delivery confirmation
