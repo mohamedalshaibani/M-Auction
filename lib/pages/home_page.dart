@@ -63,14 +63,14 @@ class _HomePageState extends State<HomePage> {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 34,
-                      height: 34,
+                      width: 48,
+                      height: 28,
                       child: Image.asset(
                         'assets/branding/logo_light.png',
                         fit: BoxFit.contain,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 16),
                     Text(
                       'M Auction',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(

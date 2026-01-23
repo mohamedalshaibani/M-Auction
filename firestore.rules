@@ -76,11 +76,8 @@ service cloud.firestore {
     
     // Auctions collection
     match /auctions/{auctionId} {
-      // Anyone authenticated can read ACTIVE and ENDED auctions
-      allow read: if request.auth != null && 
-                    (resource.data.state == 'ACTIVE' || resource.data.state == 'ENDED' || 
-                     // Seller can read their own auctions regardless of state
-                     resource.data.sellerId == request.auth.uid);
+      // Anyone authenticated can read auctions (list and get)
+      allow read: if request.auth != null;
       
       // Create: Only seller can create DRAFT auctions, and sellerId must match auth.uid
       allow create: if request.auth != null &&
