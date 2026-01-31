@@ -1186,53 +1186,66 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                     SizedBox(
                                       width: double.infinity,
                               child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  setState(() => _isProcessing = true);
-                                  try {
-                                    final success =
-                                        await Navigator.of(context)
-                                            .push<bool>(
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            PaymentPage(
-                                          type: 'seller_commission',
-                                          amount:
-                                              sellerCommissionDue,
-                                          auctionId:
-                                              widget.auctionId,
-                                          title:
-                                              'Pay Seller Commission',
+                                onPressed: _isProcessing
+                                    ? null
+                                    : () async {
+                                        setState(() => _isProcessing = true);
+                                        try {
+                                          final success =
+                                              await Navigator.of(context)
+                                                  .push<bool>(
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  PaymentPage(
+                                                type: 'seller_commission',
+                                                amount:
+                                                    sellerCommissionDue,
+                                                auctionId:
+                                                    widget.auctionId,
+                                                title:
+                                                    'Pay Seller Commission',
+                                              ),
+                                            ),
+                                          );
+                                          if (mounted && success == true) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                    'Seller commission payment successful'),
+                                                backgroundColor:
+                                                    AppTheme.success,
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                  content: Text(
+                                                      'Payment error: $e')),
+                                            );
+                                          }
+                                        } finally {
+                                          if (mounted) {
+                                            setState(() =>
+                                                _isProcessing = false);
+                                          }
+                                        }
+                                      },
+                                icon: _isProcessing
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  Colors.white),
                                         ),
-                                      ),
-                                    );
-                                    if (mounted && success == true) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                              'Seller commission payment successful'),
-                                          backgroundColor:
-                                              AppTheme.success,
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                            content: Text(
-                                                'Payment error: $e')),
-                                      );
-                                    }
-                                  } finally {
-                                    if (mounted) {
-                                      setState(() =>
-                                          _isProcessing = false);
-                                    }
-                                  }
-                                },
-                                icon: const Icon(Icons.payment),
+                                      )
+                                    : const Icon(Icons.payment),
                                 label: const Text('Pay Seller Commission'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppTheme.warning,
