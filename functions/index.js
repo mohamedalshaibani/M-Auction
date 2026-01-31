@@ -1210,7 +1210,14 @@ exports.watermarkAuctionImage = functions
         const imageIndex = images.findIndex((img) => img.id === idToStore || img.id === imageId);
         
         if (imageIndex < 0) {
-          // Image doesn't exist yet - add it (already checked max limit above)
+          // Image doesn't exist yet - re-check max limit inside transaction
+          // This prevents race condition where multiple uploads bypass the limit
+          if (images.length >= 6) {
+            console.log('Max 6 images reached inside transaction, skipping add:', auctionId);
+            // Don't throw error - just skip adding (file is already public)
+            return;
+          }
+          
           const willBePrimary = images.length === 0;
           
           // Add new image with URL already set
