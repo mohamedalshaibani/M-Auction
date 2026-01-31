@@ -5,6 +5,7 @@ import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
 import '../services/firestore_service.dart';
 import '../services/kyc_service.dart';
+import '../theme/app_theme.dart';
 
 class AdminPanelPage extends StatefulWidget {
   const AdminPanelPage({super.key});
@@ -139,18 +140,23 @@ class _AdminPanelPageState extends State<AdminPanelPage>
             appBar: AppBar(
               title: const Text('Admin Panel'),
             ),
-            body: const Center(
+            body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.block, size: 64, color: Colors.red),
-                  SizedBox(height: 16),
+                  Icon(Icons.block, size: 64, color: AppTheme.error),
+                  const SizedBox(height: 16),
                   Text(
                     'Not Authorized',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                  SizedBox(height: 8),
-                  Text('You do not have admin privileges.'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'You do not have admin privileges.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -190,7 +196,25 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(
-            child: Text('Error: ${snapshot.error}'),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading auctions',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${snapshot.error}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           );
         }
 
@@ -199,8 +223,25 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
-            child: Text('No auctions pending approval'),
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_circle_outline, size: 64, color: AppTheme.success),
+                const SizedBox(height: 16),
+                Text(
+                  'All caught up!',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'No auctions pending approval',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           );
         }
 
@@ -241,7 +282,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                       title,
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text('Brand: $brand'),
                     const SizedBox(height: 16),
                     FutureBuilder<List<int>>(
@@ -324,7 +365,26 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       stream: FirebaseFirestore.instance.collection('deposits').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading deposits',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${snapshot.error}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -332,7 +392,19 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('No deposits found'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.account_balance_wallet_outlined, size: 64, color: AppTheme.textTertiary),
+                const SizedBox(height: 16),
+                Text(
+                  'No deposits found',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ],
+            ),
+          );
         }
 
         return ListView.builder(
@@ -382,20 +454,21 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                             Text('Available: ${availableDeposit.toStringAsFixed(2)}'),
                             Text('Locked: ${lockedDeposit.toStringAsFixed(2)}'),
                             if (vipWaived) ...[
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.shade100,
-                                  borderRadius: BorderRadius.circular(4),
+                                  color: AppTheme.success.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppTheme.success),
                                 ),
                                 child: const Text(
                                   'VIP Deposit Waived',
                                   style: TextStyle(
-                                    color: Colors.green,
+                                    color: AppTheme.success,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -408,7 +481,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                 ElevatedButton(
                                   onPressed: () => _toggleVipWaiver(uid, vipWaived),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: vipWaived ? Colors.orange : Colors.green,
+                                    backgroundColor: vipWaived ? AppTheme.warning : AppTheme.success,
                                   ),
                                   child: Text(vipWaived ? 'Remove VIP' : 'Grant VIP'),
                                 ),
@@ -420,7 +493,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                   OutlinedButton(
                                     onPressed: () => _forceForfeit(uid),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.red,
+                                      foregroundColor: AppTheme.error,
                                     ),
                                     child: const Text('Force Forfeit'),
                                   ),
@@ -447,7 +520,26 @@ class _AdminPanelPageState extends State<AdminPanelPage>
       stream: _kycService.streamPendingKycRequests(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading KYC requests',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${snapshot.error}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -455,7 +547,26 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('No pending KYC requests'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.verified_user_outlined, size: 64, color: AppTheme.success),
+                const SizedBox(height: 16),
+                Text(
+                  'All caught up!',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'No pending KYC requests',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         final requests = snapshot.data!.docs;
@@ -645,7 +756,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                 icon: const Icon(Icons.check),
                                 label: const Text('Approve'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: AppTheme.success,
                                 ),
                               ),
                             ),
@@ -701,7 +812,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                             }
                                           },
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red,
+                                            backgroundColor: AppTheme.error,
                                           ),
                                           child: const Text('Reject'),
                                         ),
@@ -712,7 +823,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                 icon: const Icon(Icons.close),
                                 label: const Text('Reject'),
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.red,
+                                  foregroundColor: AppTheme.error,
                                 ),
                               ),
                             ),
@@ -739,7 +850,26 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading revenue',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${snapshot.error}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -747,7 +877,26 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('No revenue records found'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.attach_money_outlined, size: 64, color: AppTheme.textTertiary),
+                const SizedBox(height: 16),
+                Text(
+                  'No revenue records',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Revenue will appear here once transactions occur',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
         }
 
         final records = snapshot.data!.docs;
@@ -800,7 +949,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                           'AED ${amount.toStringAsFixed(2)}',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: Colors.green,
+                            color: AppTheme.success,
                           ),
                         ),
                       ],

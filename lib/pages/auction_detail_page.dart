@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../services/auction_service.dart';
 import '../services/contract_service.dart';
+import '../theme/app_theme.dart';
 import 'terms_contract_page.dart';
 import 'payment_page.dart';
 import 'edit_draft_auction_page.dart';
@@ -183,6 +184,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Purchase confirmed. Please accept the agreement.'),
+            backgroundColor: AppTheme.success,
           ),
         );
       }
@@ -320,13 +322,13 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
 
     if (isComplete) {
       icon = Icons.check_circle;
-      color = Colors.green;
+      color = AppTheme.success;
     } else if (isActive) {
       icon = Icons.radio_button_checked;
-      color = Colors.blue;
+      color = AppTheme.primaryBlue;
     } else {
       icon = Icons.radio_button_unchecked;
-      color = Colors.grey;
+      color = AppTheme.textSecondary;
     }
 
     return Padding(
@@ -338,7 +340,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
           Text(
             '$step. $title',
             style: TextStyle(
-              color: isComplete || isActive ? Colors.black : Colors.grey,
+              color: isComplete || isActive ? AppTheme.textPrimary : AppTheme.textSecondary,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -488,8 +490,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,7 +506,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                         currentPrice.toStringAsFixed(2),
                         style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(
-                              color: Colors.blue,
+                              color: AppTheme.primaryBlue,
                               fontWeight: FontWeight.bold,
                             ),
                       ),
@@ -528,7 +531,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                           'Status: Ended',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                            color: AppTheme.error,
                           ),
                         ),
                       ],
@@ -557,13 +560,13 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                         return Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade50,
+                            color: AppTheme.success.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green),
+                            border: Border.all(color: AppTheme.success),
                           ),
                           child: const Row(
                             children: [
-                              Icon(Icons.check_circle, color: Colors.green),
+                              Icon(Icons.check_circle, color: AppTheme.success),
                               SizedBox(width: 8),
                               Text('Deposit requirement waived (VIP)'),
                             ],
@@ -575,11 +578,11 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: hasEnough
-                              ? Colors.green.shade50
-                              : Colors.orange.shade50,
+                              ? AppTheme.success.withValues(alpha: 0.1)
+                              : AppTheme.warning.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: hasEnough ? Colors.green : Colors.orange,
+                            color: hasEnough ? AppTheme.success : AppTheme.warning,
                           ),
                         ),
                         child: Column(
@@ -592,8 +595,8 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                       ? Icons.check_circle
                                       : Icons.warning,
                                   color: hasEnough
-                                      ? Colors.green
-                                      : Colors.orange,
+                                      ? AppTheme.success
+                                      : AppTheme.warning,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -617,7 +620,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                 'Maximum Bid Limit: ${bidLimit.toStringAsFixed(2)}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.blue,
+                                  color: AppTheme.primaryBlue,
                                 ),
                               ),
                             ],
@@ -669,7 +672,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                             Text(
                               'Maximum bid: ${bidLimit.toStringAsFixed(2)} (based on available deposit)',
                               style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: Colors.blue),
+                                  ?.copyWith(color: AppTheme.primaryBlue),
                             ),
                           ],
                           const SizedBox(height: 8),
@@ -715,7 +718,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                             const SizedBox(height: 8),
                             Text(
                               _bidError!,
-                              style: const TextStyle(color: Colors.red),
+                              style: const TextStyle(color: AppTheme.error),
                             ),
                           ],
                         ],
@@ -837,7 +840,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                           // Commission summary after confirm purchase
                           if (step1Complete && buyerCommissionDue != null) ...[
                             Card(
-                              color: Colors.blue.shade50,
+                              color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
                                 child: Column(
@@ -858,7 +861,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                       'Buyer Commission Due: AED ${buyerCommissionDue.toStringAsFixed(2)}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.blue,
+                                        color: AppTheme.primaryBlue,
                                       ),
                                     ),
                                   ],
@@ -976,21 +979,21 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                           if (buyerCommissionPaid) ...[
                             const SizedBox(height: 16),
                             Card(
-                              color: Colors.green.shade50,
+                              color: AppTheme.success.withValues(alpha: 0.1),
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: const Row(
                                   children: [
                                     Icon(
                                       Icons.check_circle,
-                                      color: Colors.green,
+                                      color: AppTheme.success,
                                     ),
                                     SizedBox(width: 8),
                                     Text(
                                       'Buyer commission paid ✅',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.green,
+                                        color: AppTheme.success,
                                       ),
                                     ),
                                   ],
@@ -1028,7 +1031,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                     'Seller';
 
                                 return Card(
-                                  color: Colors.green.shade50,
+                                  color: AppTheme.success.withValues(alpha: 0.1),
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
                                     child: Column(
@@ -1039,14 +1042,14 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                           children: [
                                             Icon(
                                               Icons.check_circle,
-                                              color: Colors.green,
+                                              color: AppTheme.success,
                                             ),
                                             SizedBox(width: 8),
                                             Text(
                                               'Contact Information Released',
                                               style: TextStyle(
                                                 fontWeight: FontWeight.bold,
-                                                color: Colors.green,
+                                                color: AppTheme.success,
                                               ),
                                             ),
                                           ],
@@ -1182,64 +1185,62 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                     const SizedBox(height: 16),
                                     SizedBox(
                                       width: double.infinity,
-                                      child: ElevatedButton.icon(
-                                        onPressed: _isProcessing
-                                            ? null
-                                            : () async {
-                                                setState(() => _isProcessing = true);
-                                                try {
-                                                  final success =
-                                                      await Navigator.of(context)
-                                                          .push<bool>(
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                          PaymentPage(
-                                                        type: 'seller_commission',
-                                                        amount:
-                                                            sellerCommissionDue,
-                                                        auctionId:
-                                                            widget.auctionId,
-                                                        title:
-                                                            'Pay Seller Commission',
-                                                      ),
-                                                    ),
-                                                  );
-                                                  if (mounted && success == true) {
-                                                    ScaffoldMessenger.of(context)
-                                                        .showSnackBar(
-                                                      const SnackBar(
-                                                        content: Text(
-                                                            'Seller commission payment successful'),
-                                                        backgroundColor:
-                                                            Colors.green,
-                                                      ),
-                                                    );
-                                                  }
-                                                } catch (e) {
-                                                  if (mounted) {
-                                                    ScaffoldMessenger.of(context)
-                                                        .showSnackBar(
-                                                      SnackBar(
-                                                          content: Text(
-                                                              'Payment error: $e')),
-                                                    );
-                                                  }
-                                                } finally {
-                                                  if (mounted) {
-                                                    setState(() =>
-                                                        _isProcessing = false);
-                                                  }
-                                                }
-                                              },
-                                        icon: const Icon(Icons.payment),
-                                        label: const Text('Pay Seller Commission'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.orange,
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 16,
-                                          ),
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  setState(() => _isProcessing = true);
+                                  try {
+                                    final success =
+                                        await Navigator.of(context)
+                                            .push<bool>(
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            PaymentPage(
+                                          type: 'seller_commission',
+                                          amount:
+                                              sellerCommissionDue,
+                                          auctionId:
+                                              widget.auctionId,
+                                          title:
+                                              'Pay Seller Commission',
                                         ),
                                       ),
+                                    );
+                                    if (mounted && success == true) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                              'Seller commission payment successful'),
+                                          backgroundColor:
+                                              AppTheme.success,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                            content: Text(
+                                                'Payment error: $e')),
+                                      );
+                                    }
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() =>
+                                          _isProcessing = false);
+                                    }
+                                  }
+                                },
+                                icon: const Icon(Icons.payment),
+                                label: const Text('Pay Seller Commission'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.warning,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                ),
+                              ),
                                     ),
                                   ],
                                 ),
@@ -1250,21 +1251,21 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                           if (sellerCommissionPaid) ...[
                             const SizedBox(height: 16),
                             Card(
-                              color: Colors.green.shade50,
+                              color: AppTheme.success.withValues(alpha: 0.1),
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: const Row(
                                   children: [
                                     Icon(
                                       Icons.check_circle,
-                                      color: Colors.green,
+                                      color: AppTheme.success,
                                     ),
                                     SizedBox(width: 8),
                                     Text(
                                       'Seller commission paid ✅',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.green,
+                                        color: AppTheme.success,
                                       ),
                                     ),
                                   ],
@@ -1328,7 +1329,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                       phoneSnapshot.data?['buyerName'] ?? 'Buyer';
 
                                   return Card(
-                                    color: Colors.green.shade50,
+                                    color: AppTheme.success.withValues(alpha: 0.1),
                                     child: Padding(
                                       padding: const EdgeInsets.all(16),
                                       child: Column(
@@ -1339,14 +1340,14 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                             children: [
                                               Icon(
                                                 Icons.check_circle,
-                                                color: Colors.green,
+                                                color: AppTheme.success,
                                               ),
                                               SizedBox(width: 8),
                                               Text(
                                                 'Buyer Contact Information',
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.bold,
-                                                  color: Colors.green,
+                                                  color: AppTheme.success,
                                                 ),
                                               ),
                                             ],
@@ -1430,8 +1431,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                 return Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppTheme.warning.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: AppTheme.warning),
                                   ),
                                   child: const Text(
                                     'Waiting for winner to confirm purchase.',
@@ -1441,8 +1443,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                 return Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppTheme.warning.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: AppTheme.warning),
                                   ),
                                   child: const Text(
                                     'Waiting for buyer to pay commission before contacts can be released.',
@@ -1452,8 +1455,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                 return Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppTheme.warning.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: AppTheme.warning),
                                   ),
                                   child: const Text(
                                     'Waiting for seller to pay commission before contacts can be released.',
@@ -1463,8 +1467,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                 return Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
+                                    color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: AppTheme.primaryBlue),
                                   ),
                                   child: Text(
                                     buyerAcceptedForContactMsg &&
@@ -1504,7 +1509,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 16),
                         child: Card(
-                          color: Colors.orange.shade50,
+                          color: AppTheme.warning.withValues(alpha: 0.1),
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Column(
@@ -1514,7 +1519,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                   'Admin Override',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.orange,
+                                    color: AppTheme.warning,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -1566,7 +1571,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                     ),
                                     label: const Text('Force Release Contact'),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.orange,
+                                      foregroundColor: AppTheme.warning,
                                     ),
                                   ),
                                 ),
@@ -1646,8 +1651,8 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                               color: (data['sellerConfirmedDelivery']
                                                           as bool? ??
                                                       false)
-                                                  ? Colors.green
-                                                  : Colors.grey,
+                                                  ? AppTheme.success
+                                                  : AppTheme.textSecondary,
                                             ),
                                             if (!(data['sellerConfirmedDelivery']
                                                         as bool? ??
@@ -1661,7 +1666,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                                       ? null
                                                       : () => _confirmDelivery(true),
                                                   style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.green,
+                                                    backgroundColor: AppTheme.success,
                                                   ),
                                                   child: _isProcessing
                                                       ? const SizedBox(
@@ -1704,8 +1709,8 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                               color: (data['buyerConfirmedDelivery']
                                                           as bool? ??
                                                       false)
-                                                  ? Colors.green
-                                                  : Colors.grey,
+                                                  ? AppTheme.success
+                                                  : AppTheme.textSecondary,
                                             ),
                                             if (!(data['buyerConfirmedDelivery']
                                                         as bool? ??
@@ -1719,7 +1724,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                                       ? null
                                                       : () => _confirmDelivery(false),
                                                   style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.green,
+                                                    backgroundColor: AppTheme.success,
                                                   ),
                                                   child: _isProcessing
                                                       ? const SizedBox(
@@ -1750,18 +1755,19 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
-                                    borderRadius: BorderRadius.circular(8),
+                                    color: AppTheme.success.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.success),
                                   ),
                                   child: const Row(
                                     children: [
-                                      Icon(Icons.check_circle, color: Colors.green),
+                                      Icon(Icons.check_circle, color: AppTheme.success),
                                       SizedBox(width: 8),
                                       Text(
                                         'Delivery confirmed by both parties',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.green,
+                                          color: AppTheme.success,
                                         ),
                                       ),
                                     ],

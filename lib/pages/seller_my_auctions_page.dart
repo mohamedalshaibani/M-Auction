@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
+import '../theme/app_theme.dart';
 import 'payment_page.dart';
 
 class SellerMyAuctionsPage extends StatefulWidget {
@@ -30,7 +31,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Listing fee paid. Auction will be activated.'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
           ),
         );
       }
@@ -41,8 +42,27 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text('Not logged in')),
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.login, size: 64, color: AppTheme.textTertiary),
+              const SizedBox(height: 16),
+              Text(
+                'Not logged in',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Please log in to view your auctions',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -55,7 +75,25 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
-              child: Text('Error: ${snapshot.error}'),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading auctions',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${snapshot.error}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             );
           }
 
@@ -64,8 +102,25 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text('No auctions found'),
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inventory_2_outlined, size: 64, color: AppTheme.textTertiary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No auctions yet',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Create your first auction to get started',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             );
           }
 
@@ -96,22 +151,22 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
               final state = data['state'] as String? ?? 'UNKNOWN';
               final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
 
-              Color stateColor = Colors.grey;
+              Color stateColor = AppTheme.textSecondary;
               switch (state) {
                 case 'DRAFT':
-                  stateColor = Colors.grey;
+                  stateColor = AppTheme.textSecondary;
                   break;
                 case 'PENDING_APPROVAL':
-                  stateColor = Colors.orange;
+                  stateColor = AppTheme.warning;
                   break;
                 case 'APPROVED_AWAITING_PAYMENT':
-                  stateColor = Colors.blue;
+                  stateColor = AppTheme.primaryBlue;
                   break;
                 case 'ACTIVE':
-                  stateColor = Colors.green;
+                  stateColor = AppTheme.success;
                   break;
                 case 'ENDED':
-                  stateColor = Colors.red;
+                  stateColor = AppTheme.error;
                   break;
               }
 
@@ -126,7 +181,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       Text(
                         'State: $state',
                         style: TextStyle(
@@ -134,14 +189,16 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      const SizedBox(height: 4),
                       Text('Current: ${currentPrice.toStringAsFixed(2)}'),
                       if (needsPayment) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         Container(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(4),
+                            color: AppTheme.warning.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.warning),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,13 +207,13 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                                 'Listing Fee: AED ${listingFeeAmount.toStringAsFixed(2)}',
                                 style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 12),
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton(
                                   onPressed: () => _payListingFee(auctionId, listingFeeAmount),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
+                                    backgroundColor: AppTheme.success,
                                   ),
                                   child: const Text('Pay Listing Fee'),
                                 ),

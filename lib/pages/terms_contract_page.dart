@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/contract_service.dart';
+import '../theme/app_theme.dart';
 
 class TermsContractPage extends StatefulWidget {
   final String auctionId;
@@ -49,7 +50,10 @@ class _TermsContractPageState extends State<TermsContractPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Terms accepted successfully')),
+          const SnackBar(
+            content: Text('Terms accepted successfully'),
+            backgroundColor: AppTheme.success,
+          ),
         );
         Navigator.of(context).pop();
       }
@@ -130,14 +134,14 @@ class _TermsContractPageState extends State<TermsContractPage> {
                       children: [
                         Icon(
                           sellerAccepted ? Icons.check_circle : Icons.cancel,
-                          color: sellerAccepted ? Colors.green : Colors.grey,
+                          color: sellerAccepted ? AppTheme.success : AppTheme.textSecondary,
                         ),
                         const SizedBox(width: 8),
                         const Text('Seller: '),
                         Text(
                           sellerAccepted ? 'Accepted' : 'Pending',
                           style: TextStyle(
-                            color: sellerAccepted ? Colors.green : Colors.grey,
+                            color: sellerAccepted ? AppTheme.success : AppTheme.textSecondary,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -148,14 +152,14 @@ class _TermsContractPageState extends State<TermsContractPage> {
                       children: [
                         Icon(
                           buyerAccepted ? Icons.check_circle : Icons.cancel,
-                          color: buyerAccepted ? Colors.green : Colors.grey,
+                          color: buyerAccepted ? AppTheme.success : AppTheme.textSecondary,
                         ),
                         const SizedBox(width: 8),
                         const Text('Buyer: '),
                         Text(
                           buyerAccepted ? 'Accepted' : 'Pending',
                           style: TextStyle(
-                            color: buyerAccepted ? Colors.green : Colors.grey,
+                            color: buyerAccepted ? AppTheme.success : AppTheme.textSecondary,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -173,16 +177,19 @@ class _TermsContractPageState extends State<TermsContractPage> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade50,
+                          color: AppTheme.success.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.success),
                         ),
                         child: const Row(
                           children: [
-                            Icon(Icons.check_circle, color: Colors.green),
+                            Icon(Icons.check_circle, color: AppTheme.success),
                             SizedBox(width: 8),
-                            Text(
-                              'Both parties have accepted. Contacts will be released.',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                            Expanded(
+                              child: Text(
+                                'Both parties have accepted. Contacts will be released.',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ],
                         ),
@@ -231,7 +238,7 @@ class _TermsContractPageState extends State<TermsContractPage> {
                           padding: const EdgeInsets.only(bottom: 16),
                           child: Text(
                             _error!,
-                            style: const TextStyle(color: Colors.red),
+                            style: const TextStyle(color: AppTheme.error),
                           ),
                         ),
                       ElevatedButton(

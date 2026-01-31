@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
+import '../theme/app_theme.dart';
 
 class MyWonAuctionsPage extends StatelessWidget {
   const MyWonAuctionsPage({super.key});
@@ -14,7 +15,26 @@ class MyWonAuctionsPage extends StatelessWidget {
     if (user == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('My Wins')),
-        body: const Center(child: Text('Please log in to view your won auctions')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.login, size: 64, color: AppTheme.textTertiary),
+              const SizedBox(height: 16),
+              Text(
+                'Please log in',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Log in to view your won auctions',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -27,7 +47,25 @@ class MyWonAuctionsPage extends StatelessWidget {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
-              child: Text('Error: ${snapshot.error}'),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading auctions',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${snapshot.error}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             );
           }
 
@@ -36,8 +74,25 @@ class MyWonAuctionsPage extends StatelessWidget {
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text('No won auctions yet'),
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.emoji_events_outlined, size: 64, color: AppTheme.textTertiary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No wins yet',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Start bidding to win your first auction',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             );
           }
 
@@ -70,13 +125,13 @@ class MyWonAuctionsPage extends StatelessWidget {
               final endsAt = data['endsAt'] as Timestamp?;
 
               String stateText = state;
-              Color stateColor = Colors.grey;
+              Color stateColor = AppTheme.textSecondary;
               if (state == 'ENDED') {
                 stateText = 'Ended';
-                stateColor = Colors.red;
+                stateColor = AppTheme.error;
               } else if (state == 'ACTIVE') {
                 stateText = 'Active';
-                stateColor = Colors.green;
+                stateColor = AppTheme.success;
               }
 
               String endsAtText = 'N/A';
@@ -92,15 +147,15 @@ class MyWonAuctionsPage extends StatelessWidget {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       Text(
                         'Price: AED ${currentPrice.toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          Text('State: '),
+                          const Text('State: '),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -108,7 +163,7 @@ class MyWonAuctionsPage extends StatelessWidget {
                             ),
                             decoration: BoxDecoration(
                               color: stateColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: stateColor),
                             ),
                             child: Text(
