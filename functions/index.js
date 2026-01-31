@@ -1196,12 +1196,6 @@ exports.watermarkAuctionImage = functions
           }
           
           const willBePrimary = images.length === 0;
-          if (willBePrimary) {
-            // Set all existing images to non-primary
-            for (let i = 0; i < images.length; i++) {
-              images[i] = Object.assign({}, images[i], {isPrimary: false});
-            }
-          }
           
           // Add new image with URL already set
           images.push({
