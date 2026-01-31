@@ -1125,67 +1125,80 @@ exports.watermarkAuctionImage = functions
       const idToStore = imageIdFromMeta || imageId;
 
       const auctionRef = db.collection('auctions').doc(auctionId);
-      const auctionDoc = await auctionRef.get();
-      if (!auctionDoc.exists) {
-        console.log('Auction not found:', auctionId);
-        return null;
-      }
-
-      const auctionData = auctionDoc.data();
-      const ownerUid = auctionData.ownerUid || auctionData.sellerId;
-      if (uploadedBy && ownerUid && uploadedBy !== ownerUid) {
-        console.log('UploadedBy does not match owner, skipping:', {uploadedBy, ownerUid});
-        return null;
-      }
-
-      // Add image metadata to Firestore if not already present (avoids broken callable on iOS)
-      const images = Array.isArray(auctionData.images) ? auctionData.images.map((img) => Object.assign({}, img)) : [];
-      const imageIndex = images.findIndex((img) => img.id === idToStore || img.id === imageId);
-      if (imageIndex < 0) {
-        if (images.length >= 6) {
-          console.log('Max 6 images reached, skipping add:', auctionId);
-          return null;
-        }
-        const willBePrimary = images.length === 0;
-        if (willBePrimary) {
-          for (let i = 0; i < images.length; i++) {
-            images[i] = Object.assign({}, images[i], {isPrimary: false});
-          }
-        }
-        images.push({
-          id: idToStore,
-          path: filePath,
-          wmPath: '',
-          url: '',
-          isPrimary: willBePrimary,
-          order: images.length,
-          uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        await auctionRef.update({
-          images,
-          ownerUid: ownerUid || uploadedBy,
-        });
-        console.log('Added image metadata in trigger:', {auctionId, imageId: idToStore});
-      }
-
-      // Upload-only, no watermark: set url to original file (make public), then update Firestore.
+      
+      // Make file public first (before any Firestore operations)
       await file.makePublic();
       const originUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
 
-      const auctionDoc2 = await auctionRef.get();
-      if (!auctionDoc2.exists) {
-        console.log('Auction not found:', auctionId);
-        return null;
-      }
+      // Use transaction to atomically add/update image metadata
+      // This prevents race conditions between concurrent uploads or other auction updates
+      await db.runTransaction(async (transaction) => {
+        const auctionDoc = await transaction.get(auctionRef);
+        if (!auctionDoc.exists) {
+          console.log('Auction not found:', auctionId);
+          return;
+        }
 
-      const auctionData2 = auctionDoc2.data();
-      const images2 = Array.isArray(auctionData2.images) ? [...auctionData2.images] : [];
-      const idx = images2.findIndex((img) => img.id === idToStore || img.id === imageId);
-      if (idx >= 0) {
-        images2[idx] = { ...images2[idx], url: originUrl, wmPath: '' };
-        await auctionRef.update({ images: images2 });
-        console.log('Image URL set (no watermark):', {auctionId, imageId: idToStore});
-      }
+        const auctionData = auctionDoc.data();
+        const ownerUid = auctionData.ownerUid || auctionData.sellerId;
+        
+        // Verify ownership
+        if (uploadedBy && ownerUid && uploadedBy !== ownerUid) {
+          console.log('UploadedBy does not match owner, skipping:', {uploadedBy, ownerUid});
+          return;
+        }
+
+        // Get current images array
+        const images = Array.isArray(auctionData.images) 
+          ? auctionData.images.map((img) => Object.assign({}, img)) 
+          : [];
+        
+        const imageIndex = images.findIndex((img) => img.id === idToStore || img.id === imageId);
+        
+        if (imageIndex < 0) {
+          // Image doesn't exist yet - add it
+          if (images.length >= 6) {
+            console.log('Max 6 images reached, skipping add:', auctionId);
+            return;
+          }
+          
+          const willBePrimary = images.length === 0;
+          if (willBePrimary) {
+            // Set all existing images to non-primary
+            for (let i = 0; i < images.length; i++) {
+              images[i] = Object.assign({}, images[i], {isPrimary: false});
+            }
+          }
+          
+          // Add new image with URL already set
+          images.push({
+            id: idToStore,
+            path: filePath,
+            wmPath: '',
+            url: originUrl,
+            isPrimary: willBePrimary,
+            order: images.length,
+            uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          
+          console.log('Added image with URL in trigger:', {auctionId, imageId: idToStore});
+        } else {
+          // Image exists - just update URL
+          images[imageIndex] = {
+            ...images[imageIndex],
+            url: originUrl,
+            wmPath: '',
+          };
+          
+          console.log('Updated image URL in trigger:', {auctionId, imageId: idToStore});
+        }
+        
+        // Single atomic update with all changes
+        transaction.update(auctionRef, {
+          images,
+          ownerUid: ownerUid || uploadedBy,
+        });
+      });
 
       return null;
     } catch (error) {
