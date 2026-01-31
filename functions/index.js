@@ -1207,7 +1207,12 @@ exports.watermarkAuctionImage = functions
           ? auctionDataTx.images.map((img) => Object.assign({}, img)) 
           : [];
         
-        const imageIndex = images.findIndex((img) => img.id === idToStore || img.id === imageId);
+        // Dedup: Check for existing image by id OR path to prevent duplicates
+        const imageIndex = images.findIndex((img) => 
+          img.id === idToStore || 
+          img.id === imageId || 
+          img.path === filePath
+        );
         
         if (imageIndex < 0) {
           // Image doesn't exist yet - re-check max limit inside transaction
@@ -1220,6 +1225,10 @@ exports.watermarkAuctionImage = functions
           
           const willBePrimary = images.length === 0;
           
+          // Use plain Timestamp.now() instead of FieldValue.serverTimestamp()
+          // FieldValue.serverTimestamp() cannot be used inside arrays
+          const now = admin.firestore.Timestamp.now();
+          
           // Add new image with URL already set
           images.push({
             id: idToStore,
@@ -1228,16 +1237,22 @@ exports.watermarkAuctionImage = functions
             url: originUrl,
             isPrimary: willBePrimary,
             order: images.length,
-            uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+            uploadedAt: now,
+            processedAt: now,
           });
           
           console.log('Added image with URL in trigger:', {auctionId, imageId: idToStore});
         } else {
-          // Image exists - just update URL
+          // Image exists - update URL and mark as processed
+          const now = admin.firestore.Timestamp.now();
+          
           images[imageIndex] = {
             ...images[imageIndex],
+            id: idToStore, // Ensure consistent ID
+            path: filePath,
             url: originUrl,
             wmPath: '',
+            processedAt: now,
           };
           
           console.log('Updated image URL in trigger:', {auctionId, imageId: idToStore});
