@@ -1126,75 +1126,91 @@ exports.watermarkAuctionImage = functions
 
       const auctionRef = db.collection('auctions').doc(auctionId);
       
-      // Use transaction to atomically add/update image metadata
-      // This prevents race conditions between concurrent uploads or other auction updates
+      // STEP 1: Verify ownership and security checks OUTSIDE transaction
+      // This prevents file.delete() from being called multiple times if transaction retries
+      const auctionDoc = await auctionRef.get();
+      if (!auctionDoc.exists) {
+        console.error('SECURITY: Auction not found, deleting uploaded file:', {auctionId, filePath});
+        await file.delete();
+        return null;
+      }
+
+      const auctionData = auctionDoc.data();
+      const ownerUid = auctionData.ownerUid || auctionData.sellerId;
+      
+      // SECURITY: Fail closed - reject if ownerUid is missing (prevents ownership hijacking)
+      if (!ownerUid) {
+        console.error('SECURITY: Auction missing ownerUid/sellerId, deleting uploaded file:', {
+          auctionId, 
+          filePath,
+          uploadedBy,
+          hasOwnerUid: !!auctionData.ownerUid,
+          hasSellerId: !!auctionData.sellerId,
+        });
+        await file.delete();
+        return null;
+      }
+      
+      // SECURITY: Verify ownership - must match exactly (no fallback assignment)
+      if (!uploadedBy) {
+        console.error('SECURITY: Upload missing uploadedBy metadata, deleting file:', {
+          auctionId,
+          filePath,
+        });
+        await file.delete();
+        return null;
+      }
+      
+      if (uploadedBy !== ownerUid) {
+        console.error('SECURITY: Unauthorized upload attempt, deleting file:', {
+          auctionId,
+          filePath,
+          uploadedBy,
+          ownerUid,
+        });
+        await file.delete();
+        return null;
+      }
+
+      // Ownership verified - proceed with image processing
+      console.log('Ownership verified for image upload:', {auctionId, uploadedBy, ownerUid});
+
+      // STEP 2: Make file public OUTSIDE transaction
+      // This prevents makePublic() from being called multiple times if transaction retries
+      await file.makePublic();
+      const originUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+
+      // STEP 3: Check max images limit OUTSIDE transaction
+      // This prevents file.delete() from being called multiple times if transaction retries
+      const currentImages = Array.isArray(auctionData.images) ? auctionData.images : [];
+      if (currentImages.length >= 6) {
+        const imageExists = currentImages.some((img) => img.id === idToStore || img.id === imageId);
+        if (!imageExists) {
+          console.log('Max 6 images reached, skipping add:', auctionId);
+          await file.delete();
+          return null;
+        }
+      }
+
+      // STEP 4: Run transaction for Firestore updates ONLY (no external I/O)
+      // Transaction may retry multiple times, but now contains only Firestore operations
       await db.runTransaction(async (transaction) => {
-        const auctionDoc = await transaction.get(auctionRef);
-        if (!auctionDoc.exists) {
-          console.error('SECURITY: Auction not found, deleting uploaded file:', {auctionId, filePath});
-          await file.delete();
-          return;
+        // Re-fetch auction inside transaction for atomic update
+        const auctionDocTx = await transaction.get(auctionRef);
+        if (!auctionDocTx.exists) {
+          // Auction was deleted between security check and transaction
+          throw new Error('Auction no longer exists');
         }
 
-        const auctionData = auctionDoc.data();
-        const ownerUid = auctionData.ownerUid || auctionData.sellerId;
-        
-        // SECURITY: Fail closed - reject if ownerUid is missing (prevents ownership hijacking)
-        if (!ownerUid) {
-          console.error('SECURITY: Auction missing ownerUid/sellerId, deleting uploaded file:', {
-            auctionId, 
-            filePath,
-            uploadedBy,
-            hasOwnerUid: !!auctionData.ownerUid,
-            hasSellerId: !!auctionData.sellerId,
-          });
-          await file.delete();
-          return;
-        }
-        
-        // SECURITY: Verify ownership - must match exactly (no fallback assignment)
-        if (!uploadedBy) {
-          console.error('SECURITY: Upload missing uploadedBy metadata, deleting file:', {
-            auctionId,
-            filePath,
-          });
-          await file.delete();
-          return;
-        }
-        
-        if (uploadedBy !== ownerUid) {
-          console.error('SECURITY: Unauthorized upload attempt, deleting file:', {
-            auctionId,
-            filePath,
-            uploadedBy,
-            ownerUid,
-          });
-          await file.delete();
-          return;
-        }
-
-        // Ownership verified - proceed with image processing
-        console.log('Ownership verified for image upload:', {auctionId, uploadedBy, ownerUid});
-
-        // Make file public after ownership verification
-        await file.makePublic();
-        const originUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
-
-        // Get current images array
-        const images = Array.isArray(auctionData.images) 
-          ? auctionData.images.map((img) => Object.assign({}, img)) 
+        const auctionDataTx = auctionDocTx.data();
+        const images = Array.isArray(auctionDataTx.images) 
+          ? auctionDataTx.images.map((img) => Object.assign({}, img)) 
           : [];
         
         const imageIndex = images.findIndex((img) => img.id === idToStore || img.id === imageId);
         
         if (imageIndex < 0) {
-          // Image doesn't exist yet - add it
-          if (images.length >= 6) {
-            console.log('Max 6 images reached, skipping add:', auctionId);
-            await file.delete();
-            return;
-          }
-          
+          // Image doesn't exist yet - add it (already checked max limit above)
           const willBePrimary = images.length === 0;
           
           // Add new image with URL already set
