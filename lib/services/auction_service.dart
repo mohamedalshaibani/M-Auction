@@ -206,8 +206,14 @@ class AuctionService {
     // This cannot be done inside transaction (external async call)
     final requiredDeposit = await _adminSettings.computeRequiredDeposit(amount);
     
-    // Track previous winner inside transaction to avoid race condition
-    String? previousWinnerId;
+    // Capture ORIGINAL previous winner BEFORE transaction to avoid incorrect release on retry
+    // Transaction may retry multiple times, but we need the winner from BEFORE this bid started
+    final auctionDocBefore = await auctionRef.get();
+    if (!auctionDocBefore.exists) {
+      throw Exception('Auction not found');
+    }
+    final dataBefore = auctionDocBefore.data() as Map<String, dynamic>;
+    final previousWinnerId = dataBefore['currentWinnerId'] as String?;
 
     await _firestore.runTransaction((transaction) async {
       final auctionDoc = await transaction.get(auctionRef);
@@ -234,8 +240,8 @@ class AuctionService {
         throw Exception('Seller cannot bid on their own auction');
       }
       
-      // Capture previous winner INSIDE transaction to avoid race condition
-      previousWinnerId = data['currentWinnerId'] as String?;
+      // Note: previousWinnerId is captured BEFORE transaction (above)
+      // Do NOT reassign here - transaction may retry and overwrite the original value
 
       // Check deposit requirement inline (avoiding external async call in transaction)
       final walletRef = _firestore.collection('wallets').doc(bidderId);
@@ -330,8 +336,9 @@ class AuctionService {
       }
     });
 
-    // Handle outbid - release previous winner's reservation if they were outbid
-    // This runs after transaction completes, so it's safe
+    // Handle outbid - release ORIGINAL previous winner's reservation if they were outbid
+    // previousWinnerId captured BEFORE transaction (not inside) to avoid retry issues
+    // Transaction may retry multiple times, but we always release the ORIGINAL winner
     if (previousWinnerId != null && previousWinnerId != bidderId) {
       final winnerToRelease = previousWinnerId; // Promote to non-null
       try {
