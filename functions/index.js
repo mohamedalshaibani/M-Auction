@@ -302,7 +302,7 @@ exports.addAuctionImageMetadata = functions.https.onCall(async (data, context) =
 
     await auctionRef.update({
       images,
-      ownerUid,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     console.log('addAuctionImageMetadata ok:', {auctionId, imageId});
