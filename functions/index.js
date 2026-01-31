@@ -1239,6 +1239,7 @@ exports.watermarkAuctionImage = functions
         // Single atomic update - NEVER modify ownerUid (set at auction creation only)
         transaction.update(auctionRef, {
           images,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
       });
 
