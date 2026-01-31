@@ -114,7 +114,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
         .collection('users')
         .doc(user.uid)
         .get();
-    final userData = userDoc.data() as Map<String, dynamic>?;
+    final userData = userDoc.data();
     final kycStatus = userData?['kycStatus'] as String? ?? 'not_submitted';
     
     if (kycStatus != 'approved') {
@@ -170,22 +170,33 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
         durationDays: _selectedDurationDays!,
       );
 
+      // Wait for Firestore to propagate before allowing uploads
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Verify auction exists before showing upload UI
+      final verifyDoc = await FirebaseFirestore.instance
+          .collection('auctions')
+          .doc(auctionId)
+          .get();
+
+      if (!verifyDoc.exists) {
+        throw Exception('Failed to create auction. Please try again.');
+      }
+
       setState(() {
         _auctionId = auctionId;
+        _isLoading = false;
       });
 
-      // Show success and allow user to add images before submitting
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Draft created! Add images, then submit for approval.'),
             duration: Duration(seconds: 3),
+            backgroundColor: Colors.green,
           ),
         );
       }
-      
-      // Don't auto-submit - let user add images first
-      // User can submit manually after adding images
     } catch (e) {
       setState(() {
         _error = 'Error creating auction: $e';

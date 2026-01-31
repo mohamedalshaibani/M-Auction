@@ -227,6 +227,98 @@ exports.createEphemeralPaymentRecord = functions.https.onCall(async (data, conte
   return {success: true};
 });
 
+// Add auction image metadata — callable only. No Firestore writes on device (avoids iOS "Lost connection").
+// App sends: auctionId, imageId, path, order, isPrimary, url (optional download URL for original).
+exports.addAuctionImageMetadata = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const uid = context.auth.uid;
+  const auctionId = (data && typeof data.auctionId === 'string') ? data.auctionId.trim() : '';
+  const imageId = (data && typeof data.imageId === 'string') ? data.imageId.trim() : '';
+  const path = (data && typeof data.path === 'string') ? data.path.trim() : '';
+  const rawOrder = data && data.order;
+  const order = (typeof rawOrder === 'number' && Number.isFinite(rawOrder)) ? Math.floor(rawOrder) : NaN;
+  const isPrimary = (data && typeof data.isPrimary === 'boolean') ? data.isPrimary : null;
+  const url = (data && typeof data.url === 'string') ? data.url.trim() : '';
+
+  if (!auctionId || !imageId || !path || !Number.isInteger(order) || order < 0 || isPrimary === null) {
+    console.warn('addAuctionImageMetadata invalid input:', {auctionId, imageId, path, order, isPrimary});
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Missing or invalid: auctionId, imageId, path, order (int), isPrimary (bool)'
+    );
+  }
+
+  const auctionRef = db.collection('auctions').doc(auctionId);
+
+  try {
+    const auctionDoc = await auctionRef.get();
+    if (!auctionDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Auction not found');
+    }
+
+    const d = auctionDoc.data();
+    const ownerUid = d.ownerUid || d.sellerId || null;
+    if (!ownerUid || ownerUid !== uid) {
+      throw new functions.https.HttpsError('permission-denied', 'Only auction owner can add images');
+    }
+
+    const existing = Array.isArray(d.images) ? d.images : [];
+    if (existing.length >= 6) {
+      throw new functions.https.HttpsError('failed-precondition', 'Maximum 6 images allowed');
+    }
+
+    const willBePrimary = existing.length === 0 || isPrimary;
+    const images = existing.map(function (img) {
+      const out = {
+        id: img.id || '',
+        path: img.path || '',
+        wmPath: img.wmPath != null ? img.wmPath : '',
+        url: img.url != null ? img.url : '',
+        isPrimary: willBePrimary ? false : (img.isPrimary === true),
+        order: typeof img.order === 'number' ? img.order : 0,
+        uploadedAt: img.uploadedAt,
+      };
+      return out;
+    });
+
+    if (willBePrimary && images.length > 0) {
+      for (let i = 0; i < images.length; i++) {
+        images[i].isPrimary = false;
+      }
+    }
+
+    images.push({
+      id: imageId,
+      path,
+      wmPath: '',
+      url: url || '',
+      isPrimary: willBePrimary,
+      order,
+      uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await auctionRef.update({
+      images,
+      ownerUid,
+    });
+
+    console.log('addAuctionImageMetadata ok:', {auctionId, imageId});
+    return {success: true};
+  } catch (e) {
+    if (e && typeof e.code === 'string') {
+      throw e;
+    }
+    console.error('addAuctionImageMetadata error:', (e && e.message) || e, e && e.stack);
+    throw new functions.https.HttpsError(
+      'internal',
+      'Failed to add image metadata. Please try again.'
+    );
+  }
+});
+
 // Forfeit or refund (admin only)
 exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
   // Verify authentication and admin status
@@ -1025,97 +1117,74 @@ exports.watermarkAuctionImage = functions
     console.log('Processing watermark for:', {auctionId, imageId, filePath});
 
     try {
-      // Download original image
-      const [originalBuffer] = await file.download();
+      // Custom metadata set by app on upload (uploadedBy, auctionId, imageId)
+      const meta = fileMetadata.metadata || {};
+      const customMeta = meta.metadata || meta;
+      const uploadedBy = customMeta.uploadedBy || meta.uploadedBy || null;
+      const imageIdFromMeta = customMeta.imageId || meta.imageId || null;
+      const idToStore = imageIdFromMeta || imageId;
 
-      // Process with sharp: resize, strip EXIF, add watermark
-      const maxWidth = 1600;
-      let processedImage = sharp(originalBuffer)
-        .resize(maxWidth, null, {
-          withoutEnlargement: true,
-          fit: 'inside',
-        })
-        .jpeg({quality: 85, mozjpeg: true})
-        .removeAlpha();
-
-      // Get image dimensions for watermark placement
-      const imageMetadata = await processedImage.metadata();
-      const width = imageMetadata.width || 1600;
-      const height = imageMetadata.height || 1200;
-
-      // Create watermark text SVG
-      const watermarkText = 'M Auction';
-      const fontSize = Math.max(24, Math.min(width, height) * 0.03); // 3% of smaller dimension
-      const watermarkSvg = `
-        <svg width="${width}" height="${height}">
-          <text
-            x="${width - 20}"
-            y="${height - 20}"
-            font-family="Arial, sans-serif"
-            font-size="${fontSize}"
-            font-weight="bold"
-            fill="white"
-            opacity="0.15"
-            text-anchor="end"
-            dominant-baseline="bottom"
-          >${watermarkText}</text>
-        </svg>
-      `;
-
-      // Composite watermark
-      const watermarkBuffer = Buffer.from(watermarkSvg);
-      processedImage = processedImage.composite([
-        {
-          input: watermarkBuffer,
-          blend: 'over',
-        },
-      ]);
-
-      // Get processed image buffer
-      const watermarkedBuffer = await processedImage.toBuffer();
-
-      // Upload watermarked image
-      const wmPath = `auctions/${auctionId}/wm/${imageId}.jpg`;
-      const wmFile = storage.bucket(bucketName).file(wmPath);
-      
-      await wmFile.save(watermarkedBuffer, {
-        metadata: {
-          contentType: 'image/jpeg',
-        },
-      });
-
-      // Make public or get signed URL
-      await wmFile.makePublic();
-      const wmUrl = `https://storage.googleapis.com/${bucketName}/${wmPath}`;
-
-      // Update Firestore with watermark path and URL
       const auctionRef = db.collection('auctions').doc(auctionId);
       const auctionDoc = await auctionRef.get();
-
       if (!auctionDoc.exists) {
         console.log('Auction not found:', auctionId);
         return null;
       }
 
       const auctionData = auctionDoc.data();
-      const images = Array.isArray(auctionData.images) ? [...auctionData.images] : [];
+      const ownerUid = auctionData.ownerUid || auctionData.sellerId;
+      if (uploadedBy && ownerUid && uploadedBy !== ownerUid) {
+        console.log('UploadedBy does not match owner, skipping:', {uploadedBy, ownerUid});
+        return null;
+      }
 
-      // Find and update image metadata
-      const imageIndex = images.findIndex((img) => img.id === imageId);
-      if (imageIndex >= 0) {
-        images[imageIndex] = {
-          ...images[imageIndex],
-          wmPath: wmPath,
-          url: wmUrl,
-        };
-
-        await auctionRef.update({
-          images: images,
+      // Add image metadata to Firestore if not already present (avoids broken callable on iOS)
+      const images = Array.isArray(auctionData.images) ? auctionData.images.map((img) => Object.assign({}, img)) : [];
+      const imageIndex = images.findIndex((img) => img.id === idToStore || img.id === imageId);
+      if (imageIndex < 0) {
+        if (images.length >= 6) {
+          console.log('Max 6 images reached, skipping add:', auctionId);
+          return null;
+        }
+        const willBePrimary = images.length === 0;
+        if (willBePrimary) {
+          for (let i = 0; i < images.length; i++) {
+            images[i] = Object.assign({}, images[i], {isPrimary: false});
+          }
+        }
+        images.push({
+          id: idToStore,
+          path: filePath,
+          wmPath: '',
+          url: '',
+          isPrimary: willBePrimary,
+          order: images.length,
+          uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+        await auctionRef.update({
+          images,
+          ownerUid: ownerUid || uploadedBy,
+        });
+        console.log('Added image metadata in trigger:', {auctionId, imageId: idToStore});
+      }
 
-        console.log('Watermark complete:', {auctionId, imageId, wmUrl});
-      } else {
-        console.log('Image metadata not found in Firestore:', imageId);
+      // Upload-only, no watermark: set url to original file (make public), then update Firestore.
+      await file.makePublic();
+      const originUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
+
+      const auctionDoc2 = await auctionRef.get();
+      if (!auctionDoc2.exists) {
+        console.log('Auction not found:', auctionId);
+        return null;
+      }
+
+      const auctionData2 = auctionDoc2.data();
+      const images2 = Array.isArray(auctionData2.images) ? [...auctionData2.images] : [];
+      const idx = images2.findIndex((img) => img.id === idToStore || img.id === imageId);
+      if (idx >= 0) {
+        images2[idx] = { ...images2[idx], url: originUrl, wmPath: '' };
+        await auctionRef.update({ images: images2 });
+        console.log('Image URL set (no watermark):', {auctionId, imageId: idToStore});
       }
 
       return null;
