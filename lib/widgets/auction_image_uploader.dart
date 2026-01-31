@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import '../services/auction_image_service.dart';
 import '../theme/app_theme.dart';
 
@@ -163,7 +164,11 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
   }
 
   Future<void> _uploadImage(XFile file) async {
-    final imageId = '${DateTime.now().millisecondsSinceEpoch}_${file.name.hashCode}';
+    // Generate deterministic imageId based on file content hash
+    // This ensures the same file always gets the same ID, preventing duplicates
+    final bytes = await file.readAsBytes();
+    final hash = sha256.convert(bytes);
+    final imageId = '${hash.toString().substring(0, 16)}_${file.name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_')}';
     
     debugPrint('[Upload] Starting upload for imageId: $imageId, file: ${file.name}');
     
