@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 
 class AuthTestPage extends StatefulWidget {
   const AuthTestPage({super.key});
@@ -15,10 +14,6 @@ class _AuthTestPageState extends State<AuthTestPage> {
 
   String? _verificationId;
   String _status = '';
-  
-  // Dev mode flag for simulator builds - DEBUG-only, cannot be enabled in release
-  // kDebugMode is a compile-time constant that is false in release builds
-  static const bool kDevBypassOtp = kDebugMode;
 
   @override
   void dispose() {

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
-import 'auction_detail_page.dart';
 import 'payment_page.dart';
 
 class SellerMyAuctionsPage extends StatefulWidget {
@@ -16,8 +15,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
   final AuctionService _auctionService = AuctionService();
 
   void _payListingFee(String auctionId, double amount) {
-    Navigator.of(context)
-        .push(
+    Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (context) => PaymentPage(
           type: 'listing_fee',
@@ -26,8 +24,8 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
           title: 'Pay Listing Fee',
         ),
       ),
-    )
-        .then((success) {
+    ).then((success) {
+      if (!mounted) return;
       if (success == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -149,7 +147,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Listing Fee: AED ${listingFeeAmount!.toStringAsFixed(2)}',
+                                'Listing Fee: AED ${listingFeeAmount.toStringAsFixed(2)}',
                                 style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 8),

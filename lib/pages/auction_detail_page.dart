@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../services/auction_service.dart';
-import '../services/firestore_service.dart';
 import '../services/contract_service.dart';
-import '../services/payment_service.dart';
 import 'terms_contract_page.dart';
 import 'payment_page.dart';
 import 'edit_draft_auction_page.dart';
@@ -25,9 +22,7 @@ class AuctionDetailPage extends StatefulWidget {
 class _AuctionDetailPageState extends State<AuctionDetailPage> {
   final _bidController = TextEditingController();
   final AuctionService _auctionService = AuctionService();
-  final FirestoreService _firestoreService = FirestoreService();
   final ContractService _contractService = ContractService();
-  final PaymentService _paymentService = PaymentService();
   bool _isPlacingBid = false;
   bool _isProcessing = false;
   String? _bidError;
@@ -120,7 +115,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         .collection('users')
         .doc(user.uid)
         .get();
-    final userData = userDoc.data() as Map<String, dynamic>?;
+    final userData = userDoc.data();
     final kycStatus = userData?['kycStatus'] as String? ?? 'not_submitted';
 
     if (kycStatus != 'approved') {
@@ -276,31 +271,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
     }
   }
 
-  Future<void> _reportNoResponse() async {
-    setState(() => _isProcessing = true);
-    try {
-      await _auctionService.reportNoResponse(widget.auctionId);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No response reported. Deposit forfeited.'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
-    }
-  }
-
   Future<void> _payBuyerCommission(double amount) async {
     setState(() => _isProcessing = true);
     try {
@@ -336,23 +306,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
       if (mounted) {
         setState(() => _isProcessing = false);
       }
-    }
-  }
-
-  String _formatTimeLeft(Timestamp? endsAt) {
-    if (endsAt == null) return 'No end date';
-    final now = DateTime.now();
-    final endDate = endsAt.toDate();
-    final difference = endDate.difference(now);
-
-    if (difference.isNegative) return 'Ended';
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ${difference.inHours % 24}h ${difference.inMinutes % 60}m';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ${difference.inMinutes % 60}m';
-    } else {
-      return '${difference.inMinutes}m';
     }
   }
 
@@ -392,19 +345,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         ],
       ),
     );
-  }
-
-  String _formatTimeSince(Timestamp? timestamp) {
-    if (timestamp == null) return 'Unknown';
-    final now = DateTime.now();
-    final time = timestamp.toDate();
-    final diff = now.difference(time);
-
-    if (diff.isNegative) return 'In the future';
-    if (diff.inDays > 0) return '${diff.inDays}d ${diff.inHours % 24}h ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ${diff.inMinutes % 60}m ago';
-    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
-    return 'Just now';
   }
 
   // NOTE: Countdown is handled by CountdownText widget (no page-level timer).
@@ -796,8 +736,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                     builder: (context, contractSnapshot) {
                       final buyerConfirmed =
                           data['buyerConfirmedPurchase'] as bool? ?? false;
-                      final contactReleased =
-                          data['winnerContactReleased'] as bool? ?? false;
                       final sellerConfirmed =
                           data['sellerConfirmedDelivery'] as bool? ?? false;
                       final buyerConfirmedDelivery =
@@ -835,8 +773,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                       // Get seller commission status
                       final sellerCommissionPaidWinner =
                           data['sellerCommissionPaid'] as bool? ?? false;
-                      final commissionStatusWinner =
-                          data['commissionStatus'] as String? ?? 'pending';
                       final depositStatusWinner =
                           data['depositStatus'] as String?;
                       
@@ -1174,11 +1110,8 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                     builder: (context, contractSnapshot) {
                       final buyerConfirmed =
                           data['buyerConfirmedPurchase'] as bool? ?? false;
-                      final contactReleased =
-                          data['winnerContactReleased'] as bool? ?? false;
 
                       bool sellerAccepted = false;
-                      bool buyerAccepted = false;
                       if (contractSnapshot.hasData &&
                           contractSnapshot.data!.exists) {
                         final contractData =
@@ -1186,9 +1119,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                 as Map<String, dynamic>;
                         sellerAccepted =
                             contractData['termsAcceptedSeller'] as bool? ??
-                            false;
-                        buyerAccepted =
-                            contractData['termsAcceptedBuyer'] as bool? ??
                             false;
                       }
 
@@ -1347,29 +1277,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                             builder: (context) {
                               final buyerCommissionPaidSeller =
                                   data['buyerCommissionPaid'] as bool? ?? false;
-                              final contactReleasedSeller =
-                                  data['winnerContactReleased'] as bool? ?? false;
-                              bool sellerAcceptedForContact = false;
-                              bool buyerAcceptedForContact = false;
-                              if (contractSnapshot.hasData &&
-                                  contractSnapshot.data!.exists) {
-                                final contractDataSeller =
-                                    contractSnapshot.data!.data()
-                                        as Map<String, dynamic>;
-                                sellerAcceptedForContact =
-                                    contractDataSeller['termsAcceptedSeller']
-                                            as bool? ??
-                                        false;
-                                buyerAcceptedForContact =
-                                    contractDataSeller['termsAcceptedBuyer']
-                                            as bool? ??
-                                        false;
-                              }
                               // Get seller commission status for contact gating
                               final sellerCommissionPaidForContact =
                                   data['sellerCommissionPaid'] as bool? ?? false;
-                              final commissionStatusForContact =
-                                  data['commissionStatus'] as String? ?? 'pending';
                               
                               // Get deposit status for contact gating
                               final depositStatusForContact =
@@ -1488,8 +1398,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                   data['sellerCommissionPaid'] as bool? ?? false;
                               final depositStatusSellerMsg =
                                   data['depositStatus'] as String?;
-                              final contactReleasedSellerMsg =
-                                  data['winnerContactReleased'] as bool? ?? false;
                               bool sellerAcceptedForContactMsg = false;
                               bool buyerAcceptedForContactMsg = false;
                               if (contractSnapshot.hasData &&
@@ -1680,38 +1588,17 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                           data['buyerCommissionPaid'] as bool? ?? false;
                       final sellerCommissionPaidForDelivery =
                           data['sellerCommissionPaid'] as bool? ?? false;
-                      final commissionStatusForDelivery =
-                          data['commissionStatus'] as String? ?? 'pending';
                       final depositStatusForDelivery =
                           data['depositStatus'] as String?;
-                      final contactReleasedForDelivery =
-                          data['winnerContactReleased'] as bool? ?? false;
                       
                       // Deposit must be held (or waived) to unlock contacts
                       final depositHeldOrWaivedForDelivery =
                           depositStatusForDelivery == 'held' ||
                               depositStatusForDelivery == 'waived';
                       
-                      // Get contract acceptance status
-                      bool contractAcceptedByBoth = false;
                       return StreamBuilder<DocumentSnapshot>(
                         stream: _contractService.streamContract(widget.auctionId),
                         builder: (context, contractSnapshot) {
-                          if (contractSnapshot.hasData &&
-                              contractSnapshot.data!.exists) {
-                            final contractData =
-                                contractSnapshot.data!.data()
-                                    as Map<String, dynamic>;
-                            final sellerAccepted =
-                                contractData['termsAcceptedSeller'] as bool? ??
-                                    false;
-                            final buyerAccepted =
-                                contractData['termsAcceptedBuyer'] as bool? ??
-                                    false;
-                            contractAcceptedByBoth =
-                                sellerAccepted && buyerAccepted;
-                          }
-                          
                           // Contacts unlocked = deposit held/waived AND BOTH commissions paid
                           // (as per requirements: depositStatus == held OR waived AND buyerCommissionPaid == true AND sellerCommissionPaid == true)
                           final bothCommissionsPaidForDelivery =

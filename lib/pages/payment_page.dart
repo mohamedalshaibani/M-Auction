@@ -1,6 +1,5 @@
 // Cross-platform payment page with conditional imports
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 // Conditional imports - web uses web implementation, mobile uses mobile implementation
 import 'payment_page_stub.dart'

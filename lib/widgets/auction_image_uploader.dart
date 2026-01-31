@@ -262,29 +262,6 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _getCurrentImages() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('auctions')
-          .doc(widget.auctionId)
-          .get();
-      
-      if (!doc.exists) {
-        debugPrint('[GetCurrentImages] Auction document does not exist: ${widget.auctionId}');
-        return [];
-      }
-      
-      final data = doc.data()!;
-      final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
-      debugPrint('[GetCurrentImages] Found ${images.length} images');
-      return images;
-    } catch (e, stackTrace) {
-      debugPrint('[GetCurrentImages] Error getting current images: $e');
-      debugPrint('[GetCurrentImages] Stack trace: $stackTrace');
-      return [];
-    }
-  }
-
   Future<void> _setPrimary(String imageId) async {
     if (!mounted) return;
     

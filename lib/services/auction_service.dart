@@ -248,12 +248,6 @@ class AuctionService {
 
       // Get wallet and reservation
       final walletRef = _firestore.collection('wallets').doc(bidderId);
-      final walletDoc = await transaction.get(walletRef);
-      final walletData = (walletDoc.data() ?? {}) as Map<String, dynamic>;
-      final availableDeposit =
-          (walletData['availableDeposit'] as num?)?.toDouble() ?? 0.0;
-      final reservedDeposit =
-          (walletData['reservedDeposit'] as num?)?.toDouble() ?? 0.0;
 
       // Get current reservation for this auction
       final reservationRef = _firestore
@@ -262,7 +256,7 @@ class AuctionService {
           .collection('active')
           .doc(auctionId);
       final reservationDoc = await transaction.get(reservationRef);
-      final reservationData = reservationDoc.data() as Map<String, dynamic>?;
+      final reservationData = reservationDoc.data();
       final previousRequired = reservationDoc.exists
           ? (reservationData?['requiredDeposit'] as num?)?.toDouble() ?? 0.0
           : 0.0;
@@ -395,7 +389,7 @@ class AuctionService {
 
     // Check VIP waiver
     final userDoc = await _firestore.collection('users').doc(winnerId).get();
-    final userData = userDoc.data() as Map<String, dynamic>?;
+    final userData = userDoc.data();
     final vipWaived = userData?['vipDepositWaived'] as bool? ?? false;
 
     // Hold deposit in transaction
@@ -409,7 +403,6 @@ class AuctionService {
       
       final walletData = walletDoc.data() as Map<String, dynamic>;
       final availableDeposit = (walletData['availableDeposit'] as num?)?.toDouble() ?? 0.0;
-      final reservedDeposit = (walletData['reservedDeposit'] as num?)?.toDouble() ?? 0.0;
       
       // Check if deposit can be held (VIP waived or sufficient funds)
       if (vipWaived || availableDeposit >= requiredDeposit) {
@@ -813,7 +806,7 @@ class AuctionService {
   Future<bool> isAdmin(String uid) async {
     final userDoc = await _firestore.collection('users').doc(uid).get();
     if (!userDoc.exists) return false;
-    final userData = userDoc.data() as Map<String, dynamic>?;
+    final userData = userDoc.data();
     final role = userData?['role'] as String?;
     return role == 'admin';
   }

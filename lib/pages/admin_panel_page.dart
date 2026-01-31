@@ -5,8 +5,6 @@ import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
 import '../services/firestore_service.dart';
 import '../services/kyc_service.dart';
-import '../services/payment_service.dart';
-import 'auction_detail_page.dart';
 
 class AdminPanelPage extends StatefulWidget {
   const AdminPanelPage({super.key});
@@ -21,10 +19,8 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   final AdminSettingsService _adminSettings = AdminSettingsService();
   final FirestoreService _firestoreService = FirestoreService();
   final KycService _kycService = KycService();
-  final PaymentService _paymentService = PaymentService();
   final Map<String, int> _selectedDurations = {};
   bool _isApproving = false;
-  bool _isProcessingPayment = false;
   late TabController _tabController;
 
   @override
@@ -635,17 +631,15 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                   if (user == null) return;
                                   try {
                                     await _kycService.approveKyc(uid, user.uid);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('KYC approved')),
-                                      );
-                                    }
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('KYC approved')),
+                                    );
                                   } catch (e) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Error: $e')),
-                                      );
-                                    }
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: $e')),
+                                    );
                                   }
                                 },
                                 icon: const Icon(Icons.check),
@@ -679,6 +673,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                         ElevatedButton(
                                           onPressed: () async {
                                             if (rejectController.text.trim().isEmpty) {
+                                              if (!mounted) return;
                                               ScaffoldMessenger.of(context).showSnackBar(
                                                 const SnackBar(
                                                   content: Text('Please provide a rejection reason'),
@@ -693,18 +688,16 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                                 rejectController.text.trim(),
                                                 user.uid,
                                               );
-                                              if (mounted) {
-                                                Navigator.of(context).pop();
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('KYC rejected')),
-                                                );
-                                              }
+                                              if (!mounted) return;
+                                              Navigator.of(context).pop();
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('KYC rejected')),
+                                              );
                                             } catch (e) {
-                                              if (mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(content: Text('Error: $e')),
-                                                );
-                                              }
+                                              if (!mounted) return;
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('Error: $e')),
+                                              );
                                             }
                                           },
                                           style: ElevatedButton.styleFrom(
@@ -813,8 +806,8 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('Auction ID: ${auctionId.length > 20 ? auctionId.substring(0, 20) + '...' : auctionId}'),
-                    Text('User ID: ${uid.length > 20 ? uid.substring(0, 20) + '...' : uid}'),
+                    Text('Auction ID: ${auctionId.length > 20 ? '${auctionId.substring(0, 20)}...' : auctionId}'),
+                    Text('User ID: ${uid.length > 20 ? '${uid.substring(0, 20)}...' : uid}'),
                     Text('Date: $dateText'),
                   ],
                 ),

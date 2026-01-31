@@ -50,7 +50,7 @@ class PaymentService {
     } on FirebaseFunctionsException catch (e) {
       // Extract detailed error message from Cloud Function
       final errorMessage = e.message ?? 'Unknown error';
-      final errorCode = e.code ?? 'unknown';
+      final errorCode = e.code;
       final errorDetails = e.details?.toString() ?? '';
       
       throw Exception('Failed to create payment intent ($errorCode): $errorMessage${errorDetails.isNotEmpty ? ' - $errorDetails' : ''}');

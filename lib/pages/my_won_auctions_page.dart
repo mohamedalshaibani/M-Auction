@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
-import 'auction_detail_page.dart';
 
 class MyWonAuctionsPage extends StatelessWidget {
   const MyWonAuctionsPage({super.key});
@@ -108,7 +107,7 @@ class MyWonAuctionsPage extends StatelessWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: stateColor.withOpacity(0.1),
+                              color: stateColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(color: stateColor),
                             ),
