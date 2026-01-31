@@ -1197,6 +1197,10 @@ exports.watermarkAuctionImage = functions
         }
       }
 
+      // Capture timestamp ONCE before transaction (not inside callback)
+      // Transaction may retry multiple times, but we want consistent timestamps
+      const uploadTimestamp = admin.firestore.Timestamp.now();
+
       // STEP 4: Run transaction for Firestore updates ONLY (no external I/O)
       // Transaction may retry multiple times, but now contains only Firestore operations
       await db.runTransaction(async (transaction) => {
@@ -1230,9 +1234,8 @@ exports.watermarkAuctionImage = functions
           
           const willBePrimary = images.length === 0;
           
-          // Use plain Timestamp.now() instead of FieldValue.serverTimestamp()
-          // FieldValue.serverTimestamp() cannot be used inside arrays
-          const now = admin.firestore.Timestamp.now();
+          // Use uploadTimestamp captured BEFORE transaction (not Timestamp.now() here)
+          // This ensures consistent timestamps across all retry attempts
           
           // Add new image with URL already set
           images.push({
@@ -1242,14 +1245,14 @@ exports.watermarkAuctionImage = functions
             url: originUrl,
             isPrimary: willBePrimary,
             order: images.length,
-            uploadedAt: now,
-            processedAt: now,
+            uploadedAt: uploadTimestamp,
+            processedAt: uploadTimestamp,
           });
           
           console.log('Added image with URL in trigger:', {auctionId, imageId: idToStore});
         } else {
           // Image exists - update URL and mark as processed
-          const now = admin.firestore.Timestamp.now();
+          // Use uploadTimestamp captured BEFORE transaction (not Timestamp.now() here)
           
           images[imageIndex] = {
             ...images[imageIndex],
@@ -1257,7 +1260,7 @@ exports.watermarkAuctionImage = functions
             path: filePath,
             url: originUrl,
             wmPath: '',
-            processedAt: now,
+            processedAt: uploadTimestamp,
           };
           
           console.log('Updated image URL in trigger:', {auctionId, imageId: idToStore});
