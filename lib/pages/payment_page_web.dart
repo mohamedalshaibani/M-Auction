@@ -143,7 +143,7 @@ class _PaymentPageWebState extends State<PaymentPageImpl> {
 
     _paymentSubscription?.cancel();
     _paymentSubscription = _paymentService
-        .streamPaymentStatus(_paymentId!)
+        .streamPayment(_paymentId!)
         .listen((snapshot) {
       if (!mounted) return;
 
@@ -175,7 +175,7 @@ class _PaymentPageWebState extends State<PaymentPageImpl> {
   }
 
   void _initStripePaymentElement(String clientSecret) {
-    final publishableKey = _paymentService.getPublishableKey();
+    final publishableKey = PaymentService.publishableKey;
     if (publishableKey == null || publishableKey.isEmpty) {
       setState(() {
         _error = 'Stripe publishable key not configured';
