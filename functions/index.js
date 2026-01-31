@@ -1184,7 +1184,12 @@ exports.watermarkAuctionImage = functions
       // This prevents file.delete() from being called multiple times if transaction retries
       const currentImages = Array.isArray(auctionData.images) ? auctionData.images : [];
       if (currentImages.length >= 6) {
-        const imageExists = currentImages.some((img) => img.id === idToStore || img.id === imageId);
+        // Must match transaction dedup logic EXACTLY (id OR path)
+        const imageExists = currentImages.some((img) => 
+          img.id === idToStore || 
+          img.id === imageId || 
+          img.path === filePath
+        );
         if (!imageExists) {
           console.log('Max 6 images reached, skipping add:', auctionId);
           await file.delete();
