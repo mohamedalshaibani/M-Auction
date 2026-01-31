@@ -202,6 +202,10 @@ class AuctionService {
   }) async {
     final auctionRef = _firestore.collection('auctions').doc(auctionId);
     
+    // Fetch required deposit percentage from admin settings BEFORE transaction
+    // This cannot be done inside transaction (external async call)
+    final requiredDeposit = await _adminSettings.computeRequiredDeposit(amount);
+    
     // Track previous winner inside transaction to avoid race condition
     String? previousWinnerId;
 
@@ -244,9 +248,7 @@ class AuctionService {
       final vipWaived = userData['vipDepositWaived'] == true;
       
       if (!vipWaived) {
-        // Calculate required deposit using admin settings (fetch before transaction)
-        final requiredDeposit = (amount * 0.10); // 10% - simplified, should use admin settings
-        
+        // Use requiredDeposit fetched from admin settings (before transaction)
         final walletData = walletDoc.exists ? walletDoc.data() as Map<String, dynamic> : {};
         final availableDeposit = (walletData['availableDeposit'] as num?)?.toDouble() ?? 0.0;
         final reservedDeposit = (walletData['reservedDeposit'] as num?)?.toDouble() ?? 0.0;
@@ -331,11 +333,12 @@ class AuctionService {
     // Handle outbid - release previous winner's reservation if they were outbid
     // This runs after transaction completes, so it's safe
     if (previousWinnerId != null && previousWinnerId != bidderId) {
+      final winnerToRelease = previousWinnerId; // Promote to non-null
       try {
-        await _firestoreService.releaseReservation(previousWinnerId, auctionId);
+        await _firestoreService.releaseReservation(winnerToRelease, auctionId);
       } catch (e) {
         // Log but don't fail the bid if release fails
-        print('Warning: Failed to release reservation for $previousWinnerId: $e');
+        print('Warning: Failed to release reservation for $winnerToRelease: $e');
       }
     }
   }
