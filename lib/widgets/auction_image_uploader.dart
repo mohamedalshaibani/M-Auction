@@ -213,46 +213,13 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
       }
 
       if (!mounted) {
-        debugPrint('[Upload] Widget disposed after upload, aborting metadata update');
+        debugPrint('[Upload] Widget disposed after upload');
         return;
       }
 
-      // Add metadata to Firestore
-      debugPrint('[Upload] Getting current images for metadata update');
-      final currentImages = await _getCurrentImages();
-      final isPrimary = currentImages.isEmpty; // First image is primary
-      
-      debugPrint('[Upload] Current images count: ${currentImages.length}, isPrimary: $isPrimary');
-      
-      try {
-        debugPrint('[Upload] Adding image metadata to Firestore');
-        await _imageService.addImageMetadata(
-          auctionId: widget.auctionId,
-          imageId: imageId,
-          path: uploadedPath,
-          order: currentImages.length,
-          isPrimary: isPrimary,
-        );
-        debugPrint('[Upload] Image metadata added successfully');
-      } catch (metadataError, stackTrace) {
-        // Don't fail completely - image is uploaded, metadata can be retried
-        debugPrint('[Upload] Metadata update error: $metadataError');
-        debugPrint('[Upload] Stack trace: $stackTrace');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Image uploaded but metadata update failed. Please refresh.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        // Still continue to watermark wait
-      }
-
-      if (!mounted) {
-        debugPrint('[Upload] Widget disposed after metadata update');
-        return;
-      }
+      // Storage trigger will handle metadata + URL setting
+      // Just mark as processing and let StreamBuilder show the image when ready
+      debugPrint('[Upload] Upload complete, letting trigger handle metadata');
 
       try {
         setState(() {
@@ -261,13 +228,8 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
           _selectedFiles.removeWhere((f) => f.path == file.path);
         });
       } catch (e) {
-        debugPrint('[Upload] Error in setState after metadata: $e');
+        debugPrint('[Upload] Error in setState after upload: $e');
       }
-
-      // Wait for watermark processing (poll Firestore for url)
-      debugPrint('[Upload] Starting watermark wait for: $imageId');
-      await _waitForWatermark(imageId);
-      debugPrint('[Upload] Watermark wait complete for: $imageId');
     } catch (e, stackTrace) {
       debugPrint('[Upload] Upload error for $imageId: $e');
       debugPrint('[Upload] Stack trace: $stackTrace');
@@ -320,68 +282,6 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
       debugPrint('[GetCurrentImages] Error getting current images: $e');
       debugPrint('[GetCurrentImages] Stack trace: $stackTrace');
       return [];
-    }
-  }
-
-  Future<void> _waitForWatermark(String imageId) async {
-    // Poll Firestore until watermark URL appears
-    int attempts = 0;
-    const maxAttempts = 30; // 30 seconds max wait
-    
-    debugPrint('[Watermark] Starting watermark wait for: $imageId');
-    
-    while (attempts < maxAttempts) {
-      if (!mounted) {
-        debugPrint('[Watermark] Widget disposed during watermark wait for: $imageId');
-        return;
-      }
-      
-      await Future.delayed(const Duration(seconds: 1));
-      
-      try {
-        final images = await _getCurrentImages();
-        final image = images.firstWhere(
-          (img) => img['id'] == imageId,
-          orElse: () => <String, dynamic>{},
-        );
-        
-        final url = image['url'] as String? ?? '';
-        if (url.isNotEmpty) {
-          debugPrint('[Watermark] Watermark URL found for $imageId: $url');
-          if (mounted) {
-            try {
-              setState(() {
-                _uploadStatus[imageId] = 'complete';
-              });
-            } catch (e) {
-              debugPrint('[Watermark] Error in setState when watermark found: $e');
-            }
-          }
-          return;
-        }
-        
-        attempts++;
-        if (attempts % 5 == 0) {
-          debugPrint('[Watermark] Still waiting for watermark URL, attempt $attempts/$maxAttempts');
-        }
-      } catch (e, stackTrace) {
-        debugPrint('[Watermark] Error during watermark wait: $e');
-        debugPrint('[Watermark] Stack trace: $stackTrace');
-        // Continue waiting despite error
-        attempts++;
-      }
-    }
-    
-    // Timeout - still show as processing
-    debugPrint('[Watermark] Timeout waiting for watermark URL for: $imageId');
-    if (mounted) {
-      try {
-        setState(() {
-          _uploadStatus[imageId] = 'processing';
-        });
-      } catch (e) {
-        debugPrint('[Watermark] Error in setState on timeout: $e');
-      }
     }
   }
 

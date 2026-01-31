@@ -10,7 +10,6 @@ import 'package:flutter/foundation.dart' show debugPrint;
 class AuctionImageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Serializes addImageMetadata so concurrent calls don't race on get+update (last-write-wins).
   static Future<void> _addImageMetadataMutex = Future<void>.value();
 
   // Get Storage instance - use default instance (bucket is auto-configured from FirebaseOptions)
@@ -132,6 +131,7 @@ class AuctionImageService {
         customMetadata: {
           'uploadedBy': user.uid,
           'auctionId': auctionId,
+          'imageId': imageId,
         },
       );
       
@@ -217,16 +217,25 @@ class AuctionImageService {
     return path;
   }
 
-  // Add image metadata to Firestore
+  /// Returns a long-lived download URL for a Storage path.
+  Future<String> getDownloadUrlForPath(String path) async {
+    final ref = _storage.ref(path);
+    return ref.getDownloadURL();
+  }
+
+  // Add image metadata via direct Firestore update (no Cloud Function).
+  // NOTE: This is now primarily called by the Storage trigger, not the widget.
+  // Keeps url when provided (upload-only flow) so images display without watermark.
   Future<void> addImageMetadata({
     required String auctionId,
     required String imageId,
     required String path,
     required int order,
     required bool isPrimary,
+    String? url,
   }) async {
     debugPrint('[AuctionImageService] Adding image metadata for: $imageId');
-    
+
     final prev = _addImageMetadataMutex;
     final completer = Completer<void>();
     _addImageMetadataMutex = completer.future;
@@ -241,9 +250,6 @@ class AuctionImageService {
 
       final auctionRef = _firestore.collection('auctions').doc(auctionId);
 
-      // Use get + update instead of runTransaction to avoid iOS "Lost connection" crashes
-      // that occur during Firestore transactions (transaction.get/update path).
-      // Serialized via _addImageMetadataMutex so concurrent adds don't race (last-write-wins).
       debugPrint('[AuctionImageService] Fetching auction doc for metadata update');
       final auctionDoc = await auctionRef.get();
       if (!auctionDoc.exists) {
@@ -253,16 +259,16 @@ class AuctionImageService {
 
       final data = auctionDoc.data()!;
       final ownerUid = data['ownerUid'] as String? ?? data['sellerId'] as String?;
-      
+
       if (ownerUid != user.uid) {
         debugPrint('[AuctionImageService] Ownership verification failed. Owner: $ownerUid, User: ${user.uid}');
         throw Exception('Only auction owner can add images');
       }
 
       final images = List<Map<String, dynamic>>.from(data['images'] as List? ?? []);
-      
+
       debugPrint('[AuctionImageService] Current images count: ${images.length}');
-      
+
       if (images.length >= 6) {
         debugPrint('[AuctionImageService] Maximum 6 images already reached');
         throw Exception('Maximum 6 images allowed');
@@ -270,7 +276,7 @@ class AuctionImageService {
 
       final willBePrimary = images.isEmpty || isPrimary;
       debugPrint('[AuctionImageService] Will be primary: $willBePrimary');
-      
+
       if (willBePrimary) {
         for (var img in images) {
           img['isPrimary'] = false;
@@ -281,7 +287,7 @@ class AuctionImageService {
         'id': imageId,
         'path': path,
         'wmPath': '',
-        'url': '',
+        'url': url ?? '',
         'isPrimary': willBePrimary,
         'order': order,
         'uploadedAt': FieldValue.serverTimestamp(),
@@ -291,8 +297,9 @@ class AuctionImageService {
       await auctionRef.update({
         'images': images,
         'ownerUid': ownerUid,
+        'updatedAt': FieldValue.serverTimestamp(),
       });
-      
+
       debugPrint('[AuctionImageService] Image metadata added successfully');
     } catch (e, stackTrace) {
       debugPrint('[AuctionImageService] Error adding image metadata: $e');
