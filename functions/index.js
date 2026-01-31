@@ -1126,27 +1126,59 @@ exports.watermarkAuctionImage = functions
 
       const auctionRef = db.collection('auctions').doc(auctionId);
       
-      // Make file public first (before any Firestore operations)
-      await file.makePublic();
-      const originUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
-
       // Use transaction to atomically add/update image metadata
       // This prevents race conditions between concurrent uploads or other auction updates
       await db.runTransaction(async (transaction) => {
         const auctionDoc = await transaction.get(auctionRef);
         if (!auctionDoc.exists) {
-          console.log('Auction not found:', auctionId);
+          console.error('SECURITY: Auction not found, deleting uploaded file:', {auctionId, filePath});
+          await file.delete();
           return;
         }
 
         const auctionData = auctionDoc.data();
         const ownerUid = auctionData.ownerUid || auctionData.sellerId;
         
-        // Verify ownership
-        if (uploadedBy && ownerUid && uploadedBy !== ownerUid) {
-          console.log('UploadedBy does not match owner, skipping:', {uploadedBy, ownerUid});
+        // SECURITY: Fail closed - reject if ownerUid is missing (prevents ownership hijacking)
+        if (!ownerUid) {
+          console.error('SECURITY: Auction missing ownerUid/sellerId, deleting uploaded file:', {
+            auctionId, 
+            filePath,
+            uploadedBy,
+            hasOwnerUid: !!auctionData.ownerUid,
+            hasSellerId: !!auctionData.sellerId,
+          });
+          await file.delete();
           return;
         }
+        
+        // SECURITY: Verify ownership - must match exactly (no fallback assignment)
+        if (!uploadedBy) {
+          console.error('SECURITY: Upload missing uploadedBy metadata, deleting file:', {
+            auctionId,
+            filePath,
+          });
+          await file.delete();
+          return;
+        }
+        
+        if (uploadedBy !== ownerUid) {
+          console.error('SECURITY: Unauthorized upload attempt, deleting file:', {
+            auctionId,
+            filePath,
+            uploadedBy,
+            ownerUid,
+          });
+          await file.delete();
+          return;
+        }
+
+        // Ownership verified - proceed with image processing
+        console.log('Ownership verified for image upload:', {auctionId, uploadedBy, ownerUid});
+
+        // Make file public after ownership verification
+        await file.makePublic();
+        const originUrl = `https://storage.googleapis.com/${bucketName}/${filePath}`;
 
         // Get current images array
         const images = Array.isArray(auctionData.images) 
@@ -1159,6 +1191,7 @@ exports.watermarkAuctionImage = functions
           // Image doesn't exist yet - add it
           if (images.length >= 6) {
             console.log('Max 6 images reached, skipping add:', auctionId);
+            await file.delete();
             return;
           }
           
@@ -1193,16 +1226,22 @@ exports.watermarkAuctionImage = functions
           console.log('Updated image URL in trigger:', {auctionId, imageId: idToStore});
         }
         
-        // Single atomic update with all changes
+        // Single atomic update - NEVER modify ownerUid (set at auction creation only)
         transaction.update(auctionRef, {
           images,
-          ownerUid: ownerUid || uploadedBy,
         });
       });
 
       return null;
     } catch (error) {
       console.error('Error watermarking image:', error);
+      // Delete file on error to prevent orphaned files
+      try {
+        await file.delete();
+        console.log('Deleted file after error:', filePath);
+      } catch (deleteError) {
+        console.error('Error deleting file after error:', deleteError);
+      }
       // Don't throw - allow retry
       return null;
     }
