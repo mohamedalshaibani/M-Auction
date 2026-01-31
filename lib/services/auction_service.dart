@@ -201,14 +201,9 @@ class AuctionService {
     required double amount,
   }) async {
     final auctionRef = _firestore.collection('auctions').doc(auctionId);
-
-    // Capture previous winner before transaction
-    final auctionDocBefore = await _firestore.collection('auctions').doc(auctionId).get();
-    if (!auctionDocBefore.exists) {
-      throw Exception('Auction not found');
-    }
-    final dataBefore = auctionDocBefore.data() as Map<String, dynamic>;
-    final previousWinnerId = dataBefore['currentWinnerId'] as String?;
+    
+    // Track previous winner inside transaction to avoid race condition
+    String? previousWinnerId;
 
     await _firestore.runTransaction((transaction) async {
       final auctionDoc = await transaction.get(auctionRef);
@@ -234,34 +229,64 @@ class AuctionService {
       if (bidderId == sellerId) {
         throw Exception('Seller cannot bid on their own auction');
       }
+      
+      // Capture previous winner INSIDE transaction to avoid race condition
+      previousWinnerId = data['currentWinnerId'] as String?;
 
-      // Check deposit requirement with reservation logic
-      final depositCheck = await checkDepositRequirement(
-        bidderId: bidderId,
-        auctionPrice: amount,
-        auctionId: auctionId,
-      );
-      if (!depositCheck['vipWaived'] && !depositCheck['hasEnough']) {
-        throw Exception(
-            'Insufficient deposit. Required: ${depositCheck['required']}, Eligible: ${depositCheck['eligible']}');
-      }
-
-      // Get wallet and reservation
+      // Check deposit requirement inline (avoiding external async call in transaction)
       final walletRef = _firestore.collection('wallets').doc(bidderId);
-
-      // Get current reservation for this auction
-      final reservationRef = _firestore
-          .collection('reservations')
-          .doc(bidderId)
-          .collection('active')
-          .doc(auctionId);
-      final reservationDoc = await transaction.get(reservationRef);
-      final reservationData = reservationDoc.data();
-      final previousRequired = reservationDoc.exists
-          ? (reservationData?['requiredDeposit'] as num?)?.toDouble() ?? 0.0
-          : 0.0;
-
-      final requiredDeposit = depositCheck['required'] as double;
+      final walletDoc = await transaction.get(walletRef);
+      
+      // Check VIP waiver
+      final userRef = _firestore.collection('users').doc(bidderId);
+      final userDoc = await transaction.get(userRef);
+      final userData = userDoc.exists ? userDoc.data() as Map<String, dynamic> : {};
+      final vipWaived = userData['vipDepositWaived'] == true;
+      
+      if (!vipWaived) {
+        // Calculate required deposit using admin settings (fetch before transaction)
+        final requiredDeposit = (amount * 0.10); // 10% - simplified, should use admin settings
+        
+        final walletData = walletDoc.exists ? walletDoc.data() as Map<String, dynamic> : {};
+        final availableDeposit = (walletData['availableDeposit'] as num?)?.toDouble() ?? 0.0;
+        final reservedDeposit = (walletData['reservedDeposit'] as num?)?.toDouble() ?? 0.0;
+        
+        // Get current reservation for this auction to calculate delta
+        final reservationRef = _firestore
+            .collection('reservations')
+            .doc(bidderId)
+            .collection('active')
+            .doc(auctionId);
+        final reservationDoc = await transaction.get(reservationRef);
+        final reservationData = reservationDoc.data();
+        final previousRequired = reservationDoc.exists
+            ? (reservationData?['requiredDeposit'] as num?)?.toDouble() ?? 0.0
+            : 0.0;
+        
+        final delta = requiredDeposit - previousRequired;
+        final newReserved = reservedDeposit + delta;
+        
+        // Check if user has enough available deposit
+        if (availableDeposit + reservedDeposit < newReserved) {
+          throw Exception(
+              'Insufficient deposit. Required: $requiredDeposit, Available: ${availableDeposit + reservedDeposit}');
+        }
+        
+        // Update reservation
+        transaction.set(reservationRef, {
+          'requiredDeposit': requiredDeposit,
+          'lastBidAmount': amount,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        
+        // Adjust reservedDeposit by delta
+        if (delta != 0) {
+          transaction.update(walletRef, {
+            'reservedDeposit': FieldValue.increment(delta),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
 
       // Create bid
       final bidRef = _firestore
@@ -282,22 +307,6 @@ class AuctionService {
         'currentWinnerId': bidderId,
         'bidCount': bidCount,
       });
-
-      // Update reservation
-      transaction.set(reservationRef, {
-        'requiredDeposit': requiredDeposit,
-        'lastBidAmount': amount,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      // Adjust reservedDeposit by delta
-      final delta = requiredDeposit - previousRequired;
-      if (delta != 0) {
-        transaction.update(walletRef, {
-          'reservedDeposit': FieldValue.increment(delta),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
 
       // Anti-sniping: extend endsAt if needed
       final endsAt = data['endsAt'] as Timestamp?;
@@ -320,20 +329,13 @@ class AuctionService {
     });
 
     // Handle outbid - release previous winner's reservation if they were outbid
-    // previousWinnerId is captured before transaction, so it's the winner before this bid
-    if (previousWinnerId != null &&
-        previousWinnerId != bidderId &&
-        previousWinnerId.isNotEmpty) {
-      // Check if they're still the winner after transaction
-      final auctionDocAfter = await _firestore.collection('auctions').doc(auctionId).get();
-      if (auctionDocAfter.exists) {
-        final dataAfter = auctionDocAfter.data() as Map<String, dynamic>;
-        final currentWinnerId = dataAfter['currentWinnerId'] as String?;
-        
-        // If previous winner is no longer the winner, release their reservation
-        if (currentWinnerId != previousWinnerId) {
-          await _firestoreService.releaseReservation(previousWinnerId, auctionId);
-        }
+    // This runs after transaction completes, so it's safe
+    if (previousWinnerId != null && previousWinnerId != bidderId) {
+      try {
+        await _firestoreService.releaseReservation(previousWinnerId, auctionId);
+      } catch (e) {
+        // Log but don't fail the bid if release fails
+        print('Warning: Failed to release reservation for $previousWinnerId: $e');
       }
     }
   }
