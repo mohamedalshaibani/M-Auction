@@ -286,8 +286,11 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
           backgroundColor: AppTheme.error,
         ),
       );
-      
-      setState(() => _isDeleting = false);
+    } finally {
+      // Always reset state, even if widget unmounted
+      if (mounted) {
+        setState(() => _isDeleting = false);
+      }
     }
   }
 

@@ -237,6 +237,11 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         _error = e.toString().replaceFirst('Exception: ', '');
         _isSubmitting = false;
       });
+    } finally {
+      // Always reset state, even if widget unmounted or error shown
+      if (mounted && _isSubmitting) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
