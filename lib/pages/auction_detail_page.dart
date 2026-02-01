@@ -555,156 +555,190 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
-          body: SingleChildScrollView(
-            padding: EdgeInsets.zero,
-            child: isDraft
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    child: _buildDraftAuctionUI(data, isSeller, state),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      // ——— Gallery (hero images) ———
-                      _buildImageGallery(context, data),
-                      // ——— Premium content block ———
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 16),
-                            // Title
-                            Text(
-                              (data['title'] as String?)?.trim() ?? 'Untitled',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            // Status badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: isActive
-                                    ? AppTheme.success.withValues(alpha: 0.12)
-                                    : AppTheme.textSecondary.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                isActive ? 'Active' : 'Ended',
-                                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                      color: isActive ? AppTheme.success : AppTheme.textSecondary,
+          body: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
+              child: isDraft
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      child: _buildDraftAuctionUI(data, isSeller, state),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        // ——— Gallery (hero images) ———
+                        _buildImageGallery(context, data),
+                        // ——— Content block: title → status → price card → details → description ———
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 24),
+                              // Title
+                              Text(
+                                (data['title'] as String?)?.trim() ?? 'Untitled',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                       fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
                                     ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            // Price + time card (clean CTA area)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: AppTheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppTheme.border),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Current price',
-                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                              color: AppTheme.textSecondary,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'AED ${currentPrice.toStringAsFixed(0)}',
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                              color: AppTheme.primaryBlue,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${data['bidCount'] ?? 0} bids',
-                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                              color: AppTheme.textTertiary,
-                                            ),
-                                      ),
-                                    ],
+                              const SizedBox(height: 10),
+                              // Status badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: isActive
+                                      ? AppTheme.success.withValues(alpha: 0.12)
+                                      : AppTheme.textSecondary.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isActive ? AppTheme.success.withValues(alpha: 0.4) : AppTheme.border,
                                   ),
-                                  if (isActive && endsAtTs != null)
-                                    CountdownText(endsAt: endsAtTs)
-                                  else if (isEnded && winnerId != null)
+                                ),
+                                child: Text(
+                                  isActive ? 'Active' : 'Ended',
+                                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                        color: isActive ? AppTheme.success : AppTheme.textSecondary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              // Premium price / time / bids card
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppTheme.border),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.06),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Current price',
+                                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                                  color: AppTheme.textSecondary,
+                                                ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'AED ${currentPrice.toStringAsFixed(0)}',
+                                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                                  color: AppTheme.primaryBlue,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            '${data['bidCount'] ?? 0} bids',
+                                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                  color: AppTheme.textTertiary,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (isActive && endsAtTs != null)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+                                          borderRadius: BorderRadius.circular(14),
+                                        ),
+                                        child: CountdownText(endsAt: endsAtTs),
+                                      )
+                                    else if (isEnded && winnerId != null)
+                                      Text(
+                                        'Ended',
+                                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                              color: AppTheme.error,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              // Details: 2-column grid with dividers
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppTheme.border),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                                     Text(
-                                      'Ended',
-                                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                            color: AppTheme.error,
+                                      'Details',
+                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                            color: AppTheme.textSecondary,
                                             fontWeight: FontWeight.w600,
                                           ),
                                     ),
-                                ],
+                                    const SizedBox(height: 16),
+                                    _buildDetailRowWithDivider(
+                                      'Brand',
+                                      effectiveBrandDisplay(data),
+                                      isLast: false,
+                                    ),
+                                    _buildDetailRowWithDivider(
+                                      'Category',
+                                      '${categoryGroupDisplayName(effectiveCategoryGroup(data))} / ${subcategoryDisplayName(effectiveSubcategory(data))}',
+                                      isLast: false,
+                                    ),
+                                    _buildDetailRowWithDivider(
+                                      'Condition',
+                                      (data['condition'] as String? ?? '—').toString(),
+                                      isLast: false,
+                                    ),
+                                    _buildDetailRowWithDivider(
+                                      'Item ID',
+                                      data['itemIdentifier'] as String? ?? '—',
+                                      isLast: true,
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            // Key details (compact)
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: AppTheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppTheme.border),
+                              const SizedBox(height: 24),
+                              // Description
+                              Text(
+                                'Description',
+                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Details',
-                                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                          color: AppTheme.textSecondary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  _buildDetailRow('Brand', effectiveBrandDisplay(data)),
-                                  _buildDetailRow(
-                                    'Category',
-                                    '${categoryGroupDisplayName(effectiveCategoryGroup(data))} / ${subcategoryDisplayName(effectiveSubcategory(data))}',
-                                  ),
-                                  _buildDetailRow('Condition', (data['condition'] as String? ?? '—').toString()),
-                                  _buildDetailRow('Item ID', data['itemIdentifier'] as String? ?? '—'),
-                                ],
+                              const SizedBox(height: 10),
+                              Text(
+                                data['description'] as String? ?? 'No description',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: AppTheme.textPrimary,
+                                      height: 1.5,
+                                    ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            // Description
-                            Text(
-                              'Description',
-                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              data['description'] as String? ?? 'No description',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppTheme.textPrimary,
-                                    height: 1.45,
-                                  ),
-                            ),
-                            const SizedBox(height: 24),
-                          ],
+                              const SizedBox(height: 24),
+                            ],
+                          ),
                         ),
-                      ),
                       const Divider(height: 1),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -2096,6 +2130,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
               ],
             ),
           ),
+          ),
         );
       },
     );
@@ -2482,27 +2517,71 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         ),
       );
     }
-    return SizedBox(
-      height: 280,
-      width: double.infinity,
-      child: PageView.builder(
-        itemCount: withUrl.length,
-        itemBuilder: (context, index) {
-          final img = withUrl[index] as Map<String, dynamic>;
-          final url = img['url'] as String? ?? '';
-          return Image.network(
-            url,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            errorBuilder: (_, __, ___) => Container(
-              color: AppTheme.backgroundGrey,
-              child: Center(
-                child: Icon(Icons.broken_image_outlined, size: 48, color: AppTheme.textTertiary),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: SizedBox(
+        height: 280,
+        width: double.infinity,
+        child: PageView.builder(
+          itemCount: withUrl.length,
+          itemBuilder: (context, index) {
+            final img = withUrl[index] as Map<String, dynamic>;
+            final url = img['url'] as String? ?? '';
+            return Image.network(
+              url,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              errorBuilder: (_, __, ___) => Container(
+                color: AppTheme.backgroundGrey,
+                child: Center(
+                  child: Icon(Icons.broken_image_outlined, size: 48, color: AppTheme.textTertiary),
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
+    );
+  }
+
+  /// Two-column detail row with optional divider (premium layout).
+  Widget _buildDetailRowWithDivider(String label, String value, {required bool isLast}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 96,
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textSecondary,
+                      ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textPrimary,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!isLast)
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: AppTheme.divider.withValues(alpha: 0.6),
+          ),
+      ],
     );
   }
 
