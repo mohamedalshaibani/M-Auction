@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../firebase_options.dart';
 import '../services/payment_service.dart';
 import '../services/admin_settings_service.dart';
 import '../theme/app_theme.dart';
@@ -173,7 +174,11 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
     // Properly encode values for safe JavaScript injection
     final safePublishableKey = jsonEncode(publishableKey);
     final safeClientSecret = jsonEncode(_clientSecret);
-    
+    // Stripe requires a valid HTTPS return_url. In WebView (loadHtmlString) window.location.href
+    // is about:blank/data URL, which Stripe rejects. Use the app's web origin.
+    final returnUrl = 'https://${DefaultFirebaseOptions.currentPlatform.projectId}.web.app/payment-success';
+    final safeReturnUrl = jsonEncode(returnUrl);
+
     // Create HTML page with Stripe Checkout
     final html = '''
 <!DOCTYPE html>
@@ -300,7 +305,7 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
       const {error} = await stripe.confirmPayment({
         elements,
         confirmParams: {
-          return_url: window.location.href,
+          return_url: $safeReturnUrl,
         },
         redirect: 'if_required',
       });
