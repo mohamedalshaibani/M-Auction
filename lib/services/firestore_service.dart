@@ -25,6 +25,8 @@ class FirestoreService {
       'vipDepositWaived': false,
       'strikeCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
+      'phoneVerified': true,
+      'phoneVerifiedAt': FieldValue.serverTimestamp(),
     });
 
     // Create wallet document

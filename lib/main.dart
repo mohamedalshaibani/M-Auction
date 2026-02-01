@@ -9,6 +9,7 @@ import 'pages/verify_otp_page.dart';
 import 'pages/create_profile_page.dart';
 import 'pages/main_shell.dart';
 import 'pages/explore_page.dart';
+import 'pages/listing_flow_gate_page.dart';
 import 'pages/sell_create_auction_page.dart';
 import 'pages/seller_my_auctions_page.dart';
 import 'pages/auction_detail_page.dart';
@@ -63,7 +64,7 @@ class MyApp extends StatelessWidget {
         '/createProfile': (context) => const CreateProfilePage(),
         '/home': (context) => const MainShell(),
         '/explore': (context) => const ExplorePage(),
-        '/sellCreateAuction': (context) => const SellCreateAuctionPage(),
+        '/sellCreateAuction': (context) => const ListingFlowGatePage(),
         '/sellerMyAuctions': (context) => const SellerMyAuctionsPage(),
         '/adminPanel': (context) {
           // Route protection - AdminPanelPage will check admin status internally

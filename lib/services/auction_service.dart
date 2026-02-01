@@ -161,7 +161,7 @@ class AuctionService {
     });
   }
 
-  // Mark paid and activate (only if listing fee is paid)
+  // Mark paid and activate (only if listing fee is paid and seller KYC submitted)
   Future<void> markPaidAndActivate(String auctionId) async {
     final auctionDoc = await _firestore.collection('auctions').doc(auctionId).get();
     if (!auctionDoc.exists) throw Exception('Auction not found');
@@ -175,6 +175,20 @@ class AuctionService {
     final listingFeePaid = data['listingFeePaid'] as bool? ?? false;
     if (!listingFeePaid) {
       throw Exception('Listing fee must be paid before activation');
+    }
+
+    final sellerId = data['sellerId'] as String?;
+    if (sellerId != null) {
+      final userDoc = await _firestoreService.getUser(sellerId);
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        final kycStatus = userData?['kycStatus'] as String? ?? 'not_submitted';
+        if (kycStatus != 'pending' && kycStatus != 'approved') {
+          throw Exception(
+            'Seller must submit KYC before activation. Current status: $kycStatus.',
+          );
+        }
+      }
     }
 
     await _firestore.collection('auctions').doc(auctionId).update({

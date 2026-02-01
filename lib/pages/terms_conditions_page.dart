@@ -7,7 +7,8 @@ import '../theme/app_theme.dart';
 class TermsConditionsPage extends StatelessWidget {
   const TermsConditionsPage({super.key});
 
-  static const String _staticTerms = '''
+  /// Static fallback text; also used by listing flow terms acceptance.
+  static const String staticTerms = '''
 1. Acceptance of Terms
 By using M Auction you agree to these Terms and Conditions. If you do not agree, do not use the service.
 
@@ -55,7 +56,7 @@ For questions about these terms, contact us via the Contact Us section in the ap
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('content').doc('terms').get(),
         builder: (context, snapshot) {
-          String body = _staticTerms;
+          String body = staticTerms;
           if (snapshot.hasData &&
               snapshot.data!.exists &&
               snapshot.data!.data() != null) {

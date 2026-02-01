@@ -3,11 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
+import '../services/listing_eligibility_service.dart';
 import '../models/category_model.dart';
 import '../models/watch_brand.dart';
 import '../widgets/auction_image_uploader.dart';
 import '../widgets/watch_brand_picker.dart';
 import '../theme/app_theme.dart';
+import 'listing_flow_gate_page.dart';
 
 class SellCreateAuctionPage extends StatefulWidget {
   const SellCreateAuctionPage({super.key});
@@ -44,11 +46,24 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
 
   final AuctionService _auctionService = AuctionService();
   final AdminSettingsService _adminSettings = AdminSettingsService();
+  final ListingEligibilityService _eligibility = ListingEligibilityService();
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _checkGate();
+  }
+
+  /// Redirect to gate if user bypassed flow (e.g. deep link).
+  Future<void> _checkGate() async {
+    final result = await _eligibility.checkEligibility();
+    if (!mounted) return;
+    if (!result.canProceed) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const ListingFlowGatePage()),
+      );
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -143,40 +158,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       return;
     }
 
-    // Check KYC status
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    final userData = userDoc.data();
-    final kycStatus = userData?['kycStatus'] as String? ?? 'not_submitted';
-    
-    if (kycStatus != 'approved') {
-      setState(() {
-        _error = 'KYC verification required to sell items. Please complete verification first.';
-        _isLoading = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('KYC verification required. Please complete verification first.'),
-            action: SnackBarAction(
-              label: 'Go to KYC',
-              onPressed: () {
-                Navigator.of(context).pushNamed('/kyc');
-              },
-            ),
-          ),
-        );
-        // Small delay to show message, then navigate
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            Navigator.of(context).pushNamed('/kyc');
-          }
-        });
-      }
-      return;
-    }
+    // KYC is required after listing fee payment, before activation (enforced in admin flow).
 
     final effectiveSubId = _subcategories.length == 1
         ? _subcategories.first.id
@@ -498,15 +480,54 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
                     : const Text('Create Draft'),
               )
             else
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submitForApproval,
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Submit for Approval'),
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('auctions')
+                    .doc(_auctionId)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  bool hasAtLeastOneImage = false;
+                  if (snapshot.hasData &&
+                      snapshot.data!.exists &&
+                      snapshot.data!.data() != null) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>?;
+                    final images = data?['images'] as List<dynamic>?;
+                    if (images != null && images.isNotEmpty) {
+                      hasAtLeastOneImage = images.any((img) {
+                        if (img is! Map<String, dynamic>) return false;
+                        final url = img['url'] as String?;
+                        return url != null && url.isNotEmpty;
+                      });
+                    }
+                  }
+                  final canSubmit = hasAtLeastOneImage && !_isLoading;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!hasAtLeastOneImage) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Add at least one image before submitting for approval.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                          ),
+                        ),
+                      ],
+                      ElevatedButton(
+                        onPressed: canSubmit ? _submitForApproval : null,
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Submit for Approval'),
+                      ),
+                    ],
+                  );
+                },
               ),
           ],
         ),

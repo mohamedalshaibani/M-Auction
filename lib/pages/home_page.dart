@@ -10,6 +10,7 @@ import '../services/ads_service.dart';
 import '../models/category_model.dart';
 import '../models/watch_brand.dart';
 import 'request_ad_page.dart';
+import 'listing_flow_gate_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -195,7 +196,11 @@ class _HomePageState extends State<HomePage> {
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: () => Navigator.of(context).pushNamed('/sellCreateAuction'),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const ListingFlowGatePage(),
+                      ),
+                    ),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Create Auction'),
                     style: FilledButton.styleFrom(
@@ -324,10 +329,10 @@ class _HomePageState extends State<HomePage> {
                       }
                       final ads = snapshot.data!;
                       return Column(
-                        children: ads
-                            .map((ad) => _PartnerBanner(ad: ad))
-                            .toList()
-                          ..add(const SizedBox(height: 24)),
+                        children: [
+                          ...ads.map((ad) => _PartnerBanner(ad: ad)),
+                          const SizedBox(height: 24),
+                        ],
                       );
                     },
                   ),
