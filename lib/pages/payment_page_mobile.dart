@@ -38,16 +38,19 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
   String? _error;
   String? _status = 'initializing';
   StreamSubscription<DocumentSnapshot>? _paymentSubscription;
+  Timer? _longWaitTimer;
+  bool _showLongWaitBanner = false;
 
   @override
   void initState() {
     super.initState();
-    _initializePayment();
     _initializeWebView();
+    _initializePayment();
   }
 
   @override
   void dispose() {
+    _longWaitTimer?.cancel();
     _paymentSubscription?.cancel();
     super.dispose();
   }
@@ -56,6 +59,15 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
+      ..addJavaScriptChannel(
+        'StripePayment',
+        onMessageReceived: (JavaScriptMessage message) {
+          if (mounted && message.message == 'success') {
+            _longWaitTimer?.cancel();
+            _handlePaymentSuccess();
+          }
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
@@ -314,6 +326,9 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
         errorDiv.textContent = error.message;
         submitBtn.disabled = false;
         buttonText.textContent = 'Pay Now';
+      } else {
+        buttonText.textContent = 'Payment successful!';
+        if (window.StripePayment) window.StripePayment.postMessage('success');
       }
     });
   </script>
@@ -322,9 +337,18 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
     ''';
 
     _controller.loadHtmlString(html);
+
+    // If payment is still not succeeded after 90s, show "taking longer" banner
+    _longWaitTimer?.cancel();
+    _longWaitTimer = Timer(const Duration(seconds: 90), () {
+      if (mounted && _status != 'succeeded' && _error == null) {
+        setState(() => _showLongWaitBanner = true);
+      }
+    });
   }
 
   void _handlePaymentSuccess() {
+    _longWaitTimer?.cancel();
     Navigator.of(context).pop(true);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -437,6 +461,63 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
         if (_isLoading)
           const Center(
             child: CircularProgressIndicator(),
+          ),
+        if (_showLongWaitBanner)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Material(
+              elevation: 8,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Payment is taking longer than usual.',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'If you completed payment, check your wallet or auction status. You can go back and try again if needed.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey.shade600,
+                            ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                setState(() => _showLongWaitBanner = false);
+                              },
+                              child: const Text('Keep waiting'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                _longWaitTimer?.cancel();
+                                Navigator.of(context).pop(false);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryBlue,
+                              ),
+                              child: const Text('Go back'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
       ],
     );
