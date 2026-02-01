@@ -14,7 +14,7 @@ class SellerMyAuctionsPage extends StatefulWidget {
 
 class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
   final AuctionService _auctionService = AuctionService();
-  bool _isSubmitting = false;
+  String? _submittingAuctionId; // Track which specific auction is being submitted
 
   void _payListingFee(String auctionId, double amount) {
     Navigator.of(context).push<bool>(
@@ -40,7 +40,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
   }
 
   Future<void> _submitForApproval(String auctionId) async {
-    setState(() => _isSubmitting = true);
+    setState(() => _submittingAuctionId = auctionId);
     
     try {
       await _auctionService.submitForApproval(auctionId);
@@ -65,7 +65,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
       );
     } finally {
       if (mounted) {
-        setState(() => _isSubmitting = false);
+        setState(() => _submittingAuctionId = null);
       }
     }
   }
@@ -206,6 +206,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
               final listingFeePaid = data['listingFeePaid'] as bool? ?? false;
               final needsPayment = state == 'APPROVED_AWAITING_PAYMENT' && !listingFeePaid && listingFeeAmount != null;
               final isDraft = state == 'DRAFT';
+              final isSubmitting = _submittingAuctionId == auctionId; // Check if THIS auction is being submitted
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -252,11 +253,11 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
-                                  onPressed: _isSubmitting ? null : () => _submitForApproval(auctionId),
+                                  onPressed: isSubmitting ? null : () => _submitForApproval(auctionId),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.primaryBlue,
                                   ),
-                                  icon: _isSubmitting 
+                                  icon: isSubmitting 
                                       ? const SizedBox(
                                           width: 16,
                                           height: 16,
@@ -266,7 +267,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                                           ),
                                         )
                                       : const Icon(Icons.send),
-                                  label: Text(_isSubmitting ? 'Submitting...' : 'Submit for Approval'),
+                                  label: Text(isSubmitting ? 'Submitting...' : 'Submit for Approval'),
                                 ),
                               ),
                             ],
