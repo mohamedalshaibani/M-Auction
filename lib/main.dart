@@ -17,24 +17,29 @@ import 'pages/wallet_page.dart';
 import 'pages/kyc_page.dart';
 import 'pages/my_won_auctions_page.dart';
 import 'services/payment_service.dart';
+import 'services/admin_settings_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
-  // Set Stripe publishable key (public, safe for client-side)
-  // TODO: Replace with your Stripe publishable key or get from Remote Config
-  const stripePublishableKey = String.fromEnvironment(
+
+  // Stripe publishable key: 1) Firestore adminSettings/main.stripePublishableKey, 2) dart-define
+  try {
+    final key = await AdminSettingsService().getStripePublishableKey();
+    if (key != null && key.isNotEmpty) {
+      PaymentService.setPublishableKey(key);
+    }
+  } catch (_) {}
+  const envKey = String.fromEnvironment(
     'STRIPE_PUBLISHABLE_KEY',
-    defaultValue: 'pk_test_YOUR_PUBLISHABLE_KEY', // Replace with actual key
+    defaultValue: '',
   );
-  
-  if (stripePublishableKey != 'pk_test_YOUR_PUBLISHABLE_KEY') {
-    PaymentService.setPublishableKey(stripePublishableKey);
+  if (envKey.isNotEmpty && envKey != 'pk_test_YOUR_PUBLISHABLE_KEY') {
+    PaymentService.setPublishableKey(envKey);
   }
-  
+
   runApp(const MyApp());
 }
 

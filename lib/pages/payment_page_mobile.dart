@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/payment_service.dart';
+import '../services/admin_settings_service.dart';
 import '../theme/app_theme.dart';
 
 // Export as PaymentPageImpl for conditional imports
@@ -81,6 +82,16 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
           _error = null;
           _status = 'initializing';
         });
+      }
+
+      // Ensure Stripe publishable key is set (from Firestore if not set at startup)
+      if (PaymentService.publishableKey == null || PaymentService.publishableKey!.isEmpty) {
+        try {
+          final key = await AdminSettingsService().getStripePublishableKey();
+          if (key != null && key.isNotEmpty) {
+            PaymentService.setPublishableKey(key);
+          }
+        } catch (_) {}
       }
 
       // Create PaymentIntent

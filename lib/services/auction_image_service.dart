@@ -338,7 +338,7 @@ class AuctionImageService {
 
       // Idempotent: if trigger already added this image, just set url if empty (client fallback).
       final existingIndex = images.indexWhere((img) =>
-          (img['id'] as String? == imageId) || (img['path'] as String? == path));
+          (img['id'] as String?) == imageId || (img['path'] as String?) == path);
       if (existingIndex >= 0) {
         final existing = images[existingIndex];
         final currentUrl = existing['url'] as String? ?? '';

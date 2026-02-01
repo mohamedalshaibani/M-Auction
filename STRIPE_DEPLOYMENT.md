@@ -40,23 +40,31 @@ npm install
 cd ..
 ```
 
-### 3. Set Stripe Publishable Key in Flutter (Web)
+### 3. Set Stripe Publishable Key in the App
 
-The Stripe publishable key is public and safe to use in Flutter web.
+The Stripe publishable key is public and safe to use in the client. The app loads it in this order:
 
-**Option A: Edit `lib/main.dart` directly:**
+**Option A: Firestore (recommended for production)**
 
-Replace `'pk_test_YOUR_PUBLISHABLE_KEY'` with your actual Stripe publishable key.
+Set the key in Firestore so it can be changed without rebuilding the app:
 
-**Option B: Use environment variable (recommended for CI/CD):**
+1. Open Firebase Console → Firestore.
+2. Create or open the document `adminSettings` → `main`.
+3. Add a field: `stripePublishableKey` (string) with value `pk_test_...` or `pk_live_...`.
+
+The app reads this at startup and again when opening the payment screen.
+
+**Option B: Dart define (for local runs or CI/CD)**
 
 ```bash
-# When running
-flutter run -d chrome --dart-define=STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY
+# When running (e.g. iOS Simulator)
+flutter run -d "iPhone 17 Pro" --dart-define=STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY
 
-# When building
+# When building web
 flutter build web --dart-define=STRIPE_PUBLISHABLE_KEY=pk_live_YOUR_PUBLISHABLE_KEY
 ```
+
+If both are set, the dart-define value overrides Firestore.
 
 **For web**: The code uses Stripe.js (loaded in `web/index.html`) and mounts Payment Element in Flutter web using `HtmlElementView`.
 

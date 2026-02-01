@@ -23,6 +23,17 @@ class AdminSettingsService {
     await _fetchSettings();
   }
 
+  /// Stripe publishable key (client-safe). Stored in adminSettings/main.stripePublishableKey.
+  Future<String?> getStripePublishableKey() async {
+    try {
+      final settings = await _fetchSettings();
+      final key = settings['stripePublishableKey'] as String?;
+      return (key != null && key.toString().trim().isNotEmpty) ? key.toString().trim() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Commission settings (buyer/seller)
   Future<double> getBuyerCommissionPercent() async {
     final settings = await _fetchSettings();
