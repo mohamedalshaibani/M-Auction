@@ -28,3 +28,7 @@ android/local.properties
 # Flutter generated
 .flutter-plugins-dependencies
 .env.luxuryauction-e9c56
+
+# Firebase / secrets (never commit)
+serviceAccountKey.json
+*serviceAccount*.json
