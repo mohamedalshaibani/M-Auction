@@ -5,6 +5,7 @@ import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
 import '../services/firestore_service.dart';
 import '../services/kyc_service.dart';
+import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
 
 class AdminPanelPage extends StatefulWidget {
@@ -269,7 +270,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
             final auctionId = doc.id;
 
             final title = data['title'] as String? ?? 'Untitled';
-            final brand = data['brand'] as String? ?? 'Unknown';
+            final brand = effectiveBrandDisplay(data);
 
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

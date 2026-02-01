@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../models/category_model.dart';
+import '../models/watch_brand.dart';
 import '../services/auction_service.dart';
 import '../services/contract_service.dart';
 import '../theme/app_theme.dart';
@@ -556,7 +557,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
-                Text('Brand: ${data['brand'] ?? 'Unknown'}'),
+                Text('Brand: ${effectiveBrandDisplay(data)}'),
                 Text(
                   'Category: ${categoryGroupDisplayName(effectiveCategoryGroup(data))} / ${subcategoryDisplayName(effectiveSubcategory(data))}',
                 ),
@@ -2185,7 +2186,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                 ),
                 const SizedBox(height: 16),
                 _buildDetailRow('Title', data['title'] as String? ?? 'Not set'),
-                _buildDetailRow('Brand', data['brand'] as String? ?? 'Not set'),
+                _buildDetailRow('Brand', effectiveBrandDisplay(data)),
                 _buildDetailRow(
                   'Category',
                   '${categoryGroupDisplayName(effectiveCategoryGroup(data))} / ${subcategoryDisplayName(effectiveSubcategory(data))}',

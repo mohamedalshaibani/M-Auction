@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
 import '../models/category_model.dart';
+import '../models/watch_brand.dart';
 import '../widgets/auction_image_uploader.dart';
 import '../theme/app_theme.dart';
 
@@ -27,12 +28,12 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   List<Subcategory> _subcategories = defaultSubcategories.where((s) => s.parentId == 'bags').toList();
   String _selectedCategoryGroupId = 'bags';
   String? _selectedSubcategoryId;
-  String? _selectedBrand;
+  String? _selectedBrandId; // for watches: brand id from WatchBrand; for bags: name from whitelist
   int? _selectedDurationDays;
   String? _auctionId; // Store auctionId for image upload
 
   List<String> _bagBrands = [];
-  List<String> _watchBrands = [];
+  List<WatchBrand> _watchBrands = [];
   List<int> _durationOptions = [];
   bool _isLoading = false;
   String? _error;
@@ -49,7 +50,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   Future<void> _loadSettings() async {
     try {
       final bagBrands = await _adminSettings.getWhitelistBags();
-      final watchBrands = await _adminSettings.getWhitelistWatches();
+      final watchBrands = await _adminSettings.getWatchBrands();
       final durations = await _adminSettings.getDurationOptions();
       final groups = await _adminSettings.getTopLevelCategories();
       final subs = await _adminSettings.getSubcategories('bags');
@@ -61,7 +62,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
           _categoryGroups = groups;
           _subcategories = subs;
           _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
-          _selectedBrand = _bagBrands.isNotEmpty ? _bagBrands.first : null;
+          _selectedBrandId = _bagBrands.isNotEmpty ? _bagBrands.first : null;
           _selectedDurationDays = _durationOptions.isNotEmpty ? _durationOptions.first : null;
         });
       }
@@ -78,13 +79,13 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       _subcategories = subs;
       _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
       if (groupId == 'bags') {
-        _selectedBrand = _bagBrands.isNotEmpty ? _bagBrands.first : null;
+        _selectedBrandId = _bagBrands.isNotEmpty ? _bagBrands.first : null;
         _brandTextController.clear();
       } else if (groupId == 'watches') {
-        _selectedBrand = _watchBrands.isNotEmpty ? _watchBrands.first : null;
+        _selectedBrandId = _watchBrands.isNotEmpty ? _watchBrands.first.id : null;
         _brandTextController.clear();
       } else {
-        _selectedBrand = null;
+        _selectedBrandId = null;
       }
     });
   }
@@ -176,9 +177,26 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       setState(() => _error = 'Please select category and duration');
       return;
     }
-    final brand = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches'
-        ? (_selectedBrand ?? '')
-        : _brandTextController.text.trim();
+    String brand;
+    String? brandId;
+    if (_selectedCategoryGroupId == 'bags') {
+      brand = _selectedBrandId ?? '';
+      brandId = null;
+    } else if (_selectedCategoryGroupId == 'watches') {
+      final id = _selectedBrandId;
+      if (id == null || id.isEmpty) {
+        setState(() => _error = 'Please select a brand');
+        return;
+      }
+      brandId = id;
+      WatchBrand? w;
+      for (final b in _watchBrands) {
+        if (b.id == id) { w = b; break; }
+      }
+      brand = w?.name ?? id;
+    } else {
+      brand = _brandTextController.text.trim();
+    }
     if (brand.isEmpty) {
       setState(() => _error = 'Please select or enter brand');
       return;
@@ -198,6 +216,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
         categoryGroup: _selectedCategoryGroupId,
         subcategory: _selectedSubcategoryId!,
         brand: brand,
+        brandId: brandId,
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         condition: _conditionController.text.trim(),
@@ -244,7 +263,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   @override
   Widget build(BuildContext context) {
     final useBrandDropdown = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches';
-    final availableBrands = _selectedCategoryGroupId == 'bags' ? _bagBrands : _watchBrands;
+    final isWatches = _selectedCategoryGroupId == 'watches';
 
     return Scaffold(
       appBar: AppBar(
@@ -284,14 +303,23 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
             ),
             const SizedBox(height: 16),
             if (useBrandDropdown)
-              DropdownButtonFormField<String>(
-                value: _selectedBrand,
-                decoration: const InputDecoration(labelText: 'Brand'),
-                items: availableBrands
-                    .map((b) => DropdownMenuItem(value: b, child: Text(b)))
-                    .toList(),
-                onChanged: (value) => setState(() => _selectedBrand = value),
-              )
+              isWatches
+                  ? DropdownButtonFormField<String>(
+                      value: _selectedBrandId,
+                      decoration: const InputDecoration(labelText: 'Brand'),
+                      items: _watchBrands
+                          .map((b) => DropdownMenuItem(value: b.id, child: Text(b.name)))
+                          .toList(),
+                      onChanged: (value) => setState(() => _selectedBrandId = value),
+                    )
+                  : DropdownButtonFormField<String>(
+                      value: _selectedBrandId,
+                      decoration: const InputDecoration(labelText: 'Brand'),
+                      items: _bagBrands
+                          .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                          .toList(),
+                      onChanged: (value) => setState(() => _selectedBrandId = value),
+                    )
             else
               TextFormField(
                 controller: _brandTextController,

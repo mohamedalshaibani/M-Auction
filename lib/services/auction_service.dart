@@ -13,11 +13,13 @@ class AuctionService {
   final PaymentService _paymentService = PaymentService();
 
   // Create draft auction (categoryGroup + subcategory are source of truth; category kept for legacy)
+  // For watches, pass brandId (from watch brands list) and brand (display name). Legacy: brand only.
   Future<String> createDraftAuction({
     required String sellerId,
     required String categoryGroup,
     required String subcategory,
     required String brand,
+    String? brandId,
     required String title,
     required String description,
     required String condition,
@@ -31,7 +33,7 @@ class AuctionService {
     final extendMinutes = await _adminSettings.getAntiSnipingExtendMinutes();
 
     final auctionRef = _firestore.collection('auctions').doc();
-    await auctionRef.set({
+    final payload = <String, dynamic>{
       'sellerId': sellerId,
       'ownerUid': sellerId, // Set ownerUid for image security
       'categoryGroup': categoryGroup,
@@ -57,7 +59,11 @@ class AuctionService {
       'sellerConfirmedDelivery': false,
       'buyerConfirmedDelivery': false,
       'contactUnlockAt': null,
-    });
+    };
+    if (brandId != null && brandId.isNotEmpty) {
+      payload['brandId'] = brandId;
+    }
+    await auctionRef.set(payload);
 
     return auctionRef.id;
   }
