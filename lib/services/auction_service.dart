@@ -184,6 +184,12 @@ class AuctionService {
     });
   }
 
+  /// Sync listing fee payment from Stripe (call after user returns from successful payment).
+  /// Updates auction to paid + ACTIVE so the list reflects immediately.
+  Future<bool> syncListingFeePayment(String auctionId) async {
+    return _paymentService.syncListingFeePayment(auctionId);
+  }
+
   // Check deposit requirement with reservation logic
   Future<Map<String, dynamic>> checkDepositRequirement({
     required String bidderId,

@@ -86,9 +86,9 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo - using logo_dark.png for dark gradient background
+              // Logo - using logo_light.png for visibility on dark gradient background
               Image.asset(
-                'assets/branding/logo_dark.png',
+                'assets/branding/logo_light.png',
                 width: 220,
                 fit: BoxFit.contain,
               ),

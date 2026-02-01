@@ -85,6 +85,19 @@ class PaymentService {
     }
   }
 
+  /// Sync listing fee payment from Stripe (call after user returns from successful payment).
+  /// Updates auction to paid + ACTIVE so the list reflects immediately even if webhook was slow.
+  Future<bool> syncListingFeePayment(String auctionId) async {
+    try {
+      final callable = _functions.httpsCallable('syncListingFeePayment');
+      final result = await callable.call({'auctionId': auctionId});
+      final data = result.data as Map<String, dynamic>?;
+      return data?['updated'] as bool? ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Get payment status
   Stream<DocumentSnapshot> streamPayment(String paymentId) {
     return FirebaseFirestore.instance

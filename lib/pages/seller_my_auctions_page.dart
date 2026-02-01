@@ -62,12 +62,15 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
           title: 'Pay Listing Fee',
         ),
       ),
-    ).then((success) {
+    ).then((success) async {
       if (!mounted) return;
       if (success == true) {
+        // Sync from Stripe so the list updates even if webhook was slow or failed
+        await _auctionService.syncListingFeePayment(auctionId);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Listing fee paid. Auction will be activated.'),
+            content: Text('Listing fee paid. Auction activated.'),
             backgroundColor: AppTheme.success,
           ),
         );

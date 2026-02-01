@@ -319,6 +319,75 @@ exports.addAuctionImageMetadata = functions.https.onCall(async (data, context) =
   }
 });
 
+// Sync listing fee payment from Stripe (call after user returns from successful payment).
+// Updates auction to listingFeePaid + ACTIVE if PaymentIntent is succeeded (handles webhook delay/failure).
+exports.syncListingFeePayment = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+  const uid = context.auth.uid;
+  const auctionId = (data && typeof data.auctionId === 'string') ? data.auctionId.trim() : '';
+  if (!auctionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'auctionId is required');
+  }
+  if (!stripe) {
+    const secretKey = stripeSecretKeyParam.value();
+    stripe = require('stripe')(secretKey);
+  }
+  const auctionRef = db.collection('auctions').doc(auctionId);
+  const auctionDoc = await auctionRef.get();
+  if (!auctionDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Auction not found');
+  }
+  const auctionData = auctionDoc.data();
+  const ownerUid = auctionData.ownerUid || auctionData.sellerId;
+  if (ownerUid !== uid) {
+    throw new functions.https.HttpsError('permission-denied', 'Only the seller can sync this auction');
+  }
+  if (auctionData.listingFeePaid === true) {
+    return { updated: false, reason: 'already_paid' };
+  }
+  const paymentsSnap = await db.collection('payments')
+    .where('uid', '==', uid)
+    .where('auctionId', '==', auctionId)
+    .where('type', '==', 'listing_fee')
+    .orderBy('createdAt', 'desc')
+    .limit(1)
+    .get();
+  if (paymentsSnap.empty) {
+    return { updated: false, reason: 'no_payment' };
+  }
+  const paymentDoc = paymentsSnap.docs[0];
+  const paymentData = paymentDoc.data();
+  const stripePaymentIntentId = paymentData.stripePaymentIntentId;
+  if (!stripePaymentIntentId) {
+    return { updated: false, reason: 'no_intent' };
+  }
+  const paymentIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+  if (paymentIntent.status !== 'succeeded') {
+    return { updated: false, reason: 'not_succeeded', status: paymentIntent.status };
+  }
+  const paymentId = paymentDoc.id;
+  await auctionRef.update({
+    listingFeePaid: true,
+    listingFeePaymentId: paymentId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  const state = auctionData.state;
+  if (state === 'APPROVED_AWAITING_PAYMENT') {
+    await auctionRef.update({
+      state: 'ACTIVE',
+      activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+  await paymentDoc.ref.update({
+    status: 'succeeded',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  console.log('syncListingFeePayment ok:', { auctionId, paymentId });
+  return { updated: true };
+});
+
 // Forfeit or refund (admin only)
 exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
   // Verify authentication and admin status
