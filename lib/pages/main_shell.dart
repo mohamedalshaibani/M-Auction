@@ -29,18 +29,6 @@ class _MainShellState extends State<MainShell> {
         index: _currentIndex,
         children: _pages,
       ),
-      floatingActionButton: (_currentIndex == 0 || _currentIndex == 1)
-          ? FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.of(context).pushNamed('/sellCreateAuction');
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Create Auction'),
-              backgroundColor: AppTheme.primaryBlue,
-              foregroundColor: Colors.white,
-            )
-          : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {

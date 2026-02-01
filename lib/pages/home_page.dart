@@ -77,7 +77,7 @@ class _HomePageState extends State<HomePage> {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // Top row: search placeholder + Create Auction button
+            // Top row: search placeholder + Create Auction button (no overflow)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -108,11 +108,15 @@ class _HomePageState extends State<HomePage> {
                                   color: Colors.grey.shade600,
                                 ),
                                 const SizedBox(width: 12),
-                                Text(
-                                  'Search auctions...',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                        color: Colors.grey.shade600,
-                                      ),
+                                Expanded(
+                                  child: Text(
+                                    'Search auctions...',
+                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                          color: Colors.grey.shade600,
+                                        ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ],
                             ),
@@ -121,17 +125,23 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    FilledButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pushNamed('/sellCreateAuction');
-                      },
-                      icon: const Icon(Icons.add, size: 20),
-                      label: const Text('Create Auction'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.primaryBlue,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pushNamed('/sellCreateAuction');
+                          },
+                          icon: const Icon(Icons.add, size: 20),
+                          label: const Text('Create Auction'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppTheme.primaryBlue,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
                         ),
                       ),
                     ),
