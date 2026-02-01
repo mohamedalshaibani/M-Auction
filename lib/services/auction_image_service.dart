@@ -336,6 +336,23 @@ class AuctionImageService {
 
       debugPrint('[AuctionImageService] Current images count: ${images.length}');
 
+      // Idempotent: if trigger already added this image, just set url if empty (client fallback).
+      final existingIndex = images.indexWhere((img) =>
+          (img['id'] as String? == imageId) || (img['path'] as String? == path));
+      if (existingIndex >= 0) {
+        final existing = images[existingIndex];
+        final currentUrl = existing['url'] as String? ?? '';
+        if ((url != null && url.isNotEmpty) && currentUrl.isEmpty) {
+          existing['url'] = url;
+          debugPrint('[AuctionImageService] Updated existing image URL (client fallback)');
+          await auctionRef.update({
+            'images': images,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        return;
+      }
+
       if (images.length >= 6) {
         debugPrint('[AuctionImageService] Maximum 6 images already reached');
         throw Exception('Maximum 6 images allowed');
@@ -350,13 +367,15 @@ class AuctionImageService {
         }
       }
 
+      // Use images.length for order so new image gets correct index (caller can pass 0).
+      final newOrder = images.length;
       images.add({
         'id': imageId,
         'path': path,
         'wmPath': '',
         'url': url ?? '',
         'isPrimary': willBePrimary,
-        'order': order,
+        'order': newOrder,
         'uploadedAt': FieldValue.serverTimestamp(),
       });
 

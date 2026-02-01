@@ -223,9 +223,37 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
         return;
       }
 
-      // Storage trigger will handle metadata + URL setting
-      // Just mark as processing and let StreamBuilder show the image when ready
-      debugPrint('[Upload] Upload complete, letting trigger handle metadata');
+      // Client-side fallback: get download URL and add image metadata so images show
+      // even if the Storage trigger (watermarkAuctionImage) hasn't run or fails.
+      String? downloadUrl;
+      try {
+        downloadUrl = await _imageService.getDownloadUrlForPath(uploadedPath);
+        debugPrint('[Upload] Got download URL for metadata');
+      } catch (urlError) {
+        debugPrint('[Upload] Could not get download URL: $urlError');
+      }
+
+      if (downloadUrl != null && downloadUrl.isNotEmpty) {
+        try {
+          await _imageService.addImageMetadata(
+            auctionId: widget.auctionId,
+            imageId: imageId,
+            path: uploadedPath,
+            order: 0,
+            isPrimary: true,
+            url: downloadUrl,
+          );
+          debugPrint('[Upload] Image metadata added with URL');
+        } catch (metaError) {
+          debugPrint('[Upload] addImageMetadata failed (trigger may still add later): $metaError');
+          // Don't fail the upload - trigger might add metadata later
+        }
+      }
+
+      if (!mounted) {
+        debugPrint('[Upload] Widget disposed after metadata');
+        return;
+      }
 
       try {
         setState(() {
