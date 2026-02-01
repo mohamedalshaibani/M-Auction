@@ -288,7 +288,16 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Auction'),
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          'Create Auction',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+        ),
       ),
       body: Form(
         key: _formKey,

@@ -36,6 +36,9 @@ class _MainShellState extends State<MainShell> {
             _currentIndex = index;
           });
         },
+        backgroundColor: AppTheme.surface,
+        indicatorColor: AppTheme.primaryBlue.withValues(alpha: 0.2),
+        surfaceTintColor: AppTheme.primaryBlue,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),

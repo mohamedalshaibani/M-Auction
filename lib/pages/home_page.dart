@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
@@ -21,11 +22,14 @@ class _HomePageState extends State<HomePage> {
   final _adminSettings = AdminSettingsService();
   List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
   bool _searchExpanded = false;
+  Map<String, int> _categoryCounts = {};
+  StreamSubscription<QuerySnapshot>? _countsSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    _subscribeCategoryCounts();
     _searchFocusNode.addListener(() {
       if (!_searchFocusNode.hasFocus && mounted) {
         setState(() => _searchExpanded = false);
@@ -40,8 +44,24 @@ class _HomePageState extends State<HomePage> {
     } catch (_) {}
   }
 
+  void _subscribeCategoryCounts() {
+    _countsSubscription?.cancel();
+    _countsSubscription = _auctionService.streamAllAuctions(limit: 200).listen((snapshot) {
+      if (!mounted) return;
+      final counts = <String, int>{};
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        if ((data['state'] as String? ?? '') != 'ACTIVE') continue;
+        final group = effectiveCategoryGroup(data);
+        counts[group] = (counts[group] ?? 0) + 1;
+      }
+      setState(() => _categoryCounts = counts);
+    });
+  }
+
   @override
   void dispose() {
+    _countsSubscription?.cancel();
     _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
@@ -53,142 +73,27 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         backgroundColor: AppTheme.primaryBlue,
         foregroundColor: Colors.white,
-        title: Row(
-          children: [
-            SizedBox(
-              width: AppTheme.headerLogoWidth,
-              height: AppTheme.headerLogoHeight,
-              child: Image.asset(
-                AppTheme.logoAssetLight,
-                fit: BoxFit.contain,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              'M Auction',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-            ),
-          ],
+        title: SizedBox(
+          width: AppTheme.headerLogoWidth,
+          height: AppTheme.headerLogoHeight,
+          child: Image.asset(
+            AppTheme.logoAssetLight,
+            fit: BoxFit.contain,
+          ),
         ),
       ),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // Top row: search placeholder + Create Auction button (no overflow)
+            // Browse options (categories grid) at top
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Material(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        child: InkWell(
-                          onTap: () {
-                            setState(() => _searchExpanded = true);
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _searchFocusNode.requestFocus();
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(14),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.search,
-                                  size: 22,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Search auctions...',
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          color: Colors.grey.shade600,
-                                        ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).pushNamed('/sellCreateAuction');
-                          },
-                          icon: const Icon(Icons.add, size: 20),
-                          label: const Text('Create Auction'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppTheme.primaryBlue,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Second row: full-width search input (visible when expanded)
-            if (_searchExpanded)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                  child: TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    decoration: InputDecoration(
-                      hintText: 'Search auctions...',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-              ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 20),
-            ),
-            
-            // Category grid (square/rectangular tiles)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     const crossAxisCount = 3;
                     const spacing = 10.0;
-                    final width = (constraints.maxWidth - (crossAxisCount - 1) * spacing) / crossAxisCount;
-                    const aspectRatio = 1.0; // square tiles
+                    const aspectRatio = 0.82;
                     return GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -197,8 +102,10 @@ class _HomePageState extends State<HomePage> {
                       crossAxisSpacing: spacing,
                       childAspectRatio: aspectRatio,
                       children: _categoryGroups.map((group) {
+                        final count = _categoryCounts[group.id] ?? 0;
                         return _CategoryTile(
                           categoryGroup: group,
+                          activeCount: count,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -218,9 +125,185 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 20),
+            // Full-width search
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() => _searchExpanded = true);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _searchFocusNode.requestFocus();
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.search, size: 20, color: Colors.grey.shade600),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Search auctions...',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.grey.shade600,
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (_searchExpanded)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    decoration: InputDecoration(
+                      hintText: 'Search auctions...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ),
+            // Create Auction button
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.of(context).pushNamed('/sellCreateAuction'),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Create Auction'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            // Horizontal carousel: Browse auctions
+            SliverToBoxAdapter(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _auctionService.streamAllAuctions(limit: 30),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  var docs = snapshot.data!.docs.where((d) {
+                    final s = (d.data() as Map<String, dynamic>)['state'] as String? ?? '';
+                    return s == 'ACTIVE';
+                  }).toList();
+                  if (docs.isEmpty) return const SizedBox.shrink();
+                  docs = List.from(docs)..shuffle();
+                  final take = docs.take(12).toList();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          'Browse auctions',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 180,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: take.length,
+                          itemBuilder: (context, index) {
+                            final doc = take[index];
+                            final data = doc.data() as Map<String, dynamic>;
+                            final auctionId = doc.id;
+                            final title = data['title'] as String? ?? 'Untitled';
+                            final price = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
+                            final images = data['images'] as List<dynamic>?;
+                            String? imageUrl;
+                            if (images != null && images.isNotEmpty) {
+                              for (final e in images) {
+                                if (e is Map && (e['isPrimary'] == true)) {
+                                  imageUrl = e['url'] as String?;
+                                  break;
+                                }
+                              }
+                              if (imageUrl == null && images.isNotEmpty) {
+                                final first = images.first;
+                                if (first is Map) {
+                                  imageUrl = first['url'] as String?;
+                                } else if (first is String) {
+                                  imageUrl = first;
+                                }
+                              }
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: _HomeAuctionChip(
+                                auctionId: auctionId,
+                                title: title,
+                                price: price,
+                                imageUrl: imageUrl,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            // Ads section at bottom: full-width edge-to-edge banners (reduced height)
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      'Partners',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _BannerPlaceholder(),
+                  _BannerPlaceholder(),
+                  _BannerPlaceholder(),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           ],
         ),
@@ -229,13 +312,15 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-/// Premium category tile for the home grid (square/rectangular, tappable).
+/// Premium category tile for the home grid (tappable, shows active count).
 class _CategoryTile extends StatelessWidget {
   final CategoryGroup categoryGroup;
+  final int activeCount;
   final VoidCallback onTap;
 
   const _CategoryTile({
     required this.categoryGroup,
+    this.activeCount = 0,
     required this.onTap,
   });
 
@@ -281,7 +366,7 @@ class _CategoryTile extends StatelessWidget {
                   size: 28,
                   color: AppTheme.primaryBlue,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Text(
@@ -296,11 +381,124 @@ class _CategoryTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  '$activeCount active',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Full-width edge-to-edge partner/company banner (image-based); content fills width.
+class _BannerPlaceholder extends StatelessWidget {
+  static const double _bannerHeight = 72;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: _bannerHeight,
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundGrey,
+        border: Border(
+          top: BorderSide(color: AppTheme.border),
+          bottom: BorderSide(color: AppTheme.border),
+        ),
+      ),
+      child: Center(
+        child: Icon(Icons.campaign_outlined, size: 28, color: AppTheme.textTertiary),
+      ),
+    );
+  }
+}
+
+/// Compact auction chip for home horizontal carousel.
+class _HomeAuctionChip extends StatelessWidget {
+  final String auctionId;
+  final String title;
+  final double price;
+  final String? imageUrl;
+
+  const _HomeAuctionChip({
+    required this.auctionId,
+    required this.title,
+    required this.price,
+    this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.pushNamed(context, '/auctionDetail?auctionId=$auctionId'),
+        child: Container(
+          width: 140,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 3,
+                child: imageUrl != null && imageUrl!.isNotEmpty
+                    ? Image.network(
+                        imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _ChipImagePlaceholder(),
+                      )
+                    : _ChipImagePlaceholder(),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'AED ${price.toStringAsFixed(0)}',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: AppTheme.primaryBlue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChipImagePlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.backgroundGrey,
+      child: Center(child: Icon(Icons.image_outlined, size: 32, color: AppTheme.textTertiary)),
     );
   }
 }

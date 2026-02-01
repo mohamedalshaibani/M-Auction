@@ -14,7 +14,17 @@ class MyWonAuctionsPage extends StatelessWidget {
 
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('My Wins')),
+        appBar: AppBar(
+          backgroundColor: AppTheme.primaryBlue,
+          foregroundColor: Colors.white,
+          title: Text(
+            'My Wins',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+          ),
+        ),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -39,8 +49,18 @@ class MyWonAuctionsPage extends StatelessWidget {
     }
 
     return Scaffold(
+      backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: const Text('My Wins'),
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          'My Wins',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: auctionService.streamWonAuctions(user.uid),

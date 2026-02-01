@@ -121,8 +121,18 @@ class _WalletPageState extends State<WalletPage> {
     }
 
     return Scaffold(
+      backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: const Text('Wallet'),
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          'Wallet',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+        ),
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: _firestoreService.streamWallet(user.uid),

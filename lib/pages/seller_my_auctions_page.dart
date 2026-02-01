@@ -138,8 +138,18 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
     }
 
     return Scaffold(
+      backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: const Text('My Auctions'),
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          'My Auctions',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _auctionService.streamSellerAuctions(user.uid),

@@ -24,8 +24,31 @@ class ProfilePage extends StatelessWidget {
     }
 
     return Scaffold(
+      backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: const Text('Profile'),
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Row(
+          children: [
+            SizedBox(
+              width: AppTheme.headerLogoWidth,
+              height: AppTheme.headerLogoHeight,
+              child: Image.asset(
+                AppTheme.logoAssetLight,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Profile',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+            ),
+          ],
+        ),
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
@@ -121,188 +144,194 @@ class ProfilePage extends StatelessWidget {
           final vipDepositWaived = userData?['vipDepositWaived'] as bool? ?? false;
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Profile header
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                          child: Text(
-                            displayName.isNotEmpty
-                                ? displayName[0].toUpperCase()
-                                : 'U',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: AppTheme.primaryBlue,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          displayName,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                // Profile header card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 32,
+                        backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                        child: Text(
+                          displayName.isNotEmpty
+                              ? displayName[0].toUpperCase()
+                              : 'U',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: AppTheme.primaryBlue,
                                 fontWeight: FontWeight.w600,
                               ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          phoneNumber,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                        ),
-                        if (vipDepositWaived) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'VIP Member',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: AppTheme.success,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                // KYC Status Card
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              _getKycIcon(kycStatus),
-                              color: _getKycColor(kycStatus),
-                              size: 24,
-                            ),
-                            const SizedBox(width: 12),
                             Text(
-                              'Verification Status',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              displayName,
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                     fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
                                   ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _getKycColor(kycStatus).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: _getKycColor(kycStatus).withValues(alpha: 0.3),
-                              width: 1,
+                            const SizedBox(height: 4),
+                            Text(
+                              phoneNumber,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
                             ),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
+                            if (vipDepositWaived) ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.success.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
                                 child: Text(
-                                  _getKycStatusText(kycStatus),
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: _getKycColor(kycStatus),
+                                  'VIP Member',
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        color: AppTheme.success,
                                         fontWeight: FontWeight.w600,
                                       ),
                                 ),
                               ),
-                              if (kycStatus == 'not_submitted' || kycStatus == 'rejected')
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.of(context).pushNamed('/kyc');
-                                  },
-                                  child: const Text('Start Verification'),
-                                ),
                             ],
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-                
-                const SizedBox(height: 20),
-                
-                // Menu items
-                Card(
+                const SizedBox(height: 16),
+                // Verification section
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _getKycIcon(kycStatus),
+                            color: _getKycColor(kycStatus),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Verification',
+                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _getKycColor(kycStatus).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _getKycColor(kycStatus).withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _getKycStatusText(kycStatus),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: _getKycColor(kycStatus),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ),
+                            if (kycStatus == 'not_submitted' || kycStatus == 'rejected')
+                              TextButton(
+                                onPressed: () => Navigator.of(context).pushNamed('/kyc'),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  'Verify',
+                                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                        color: AppTheme.primaryBlue,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Quick links
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border),
+                  ),
                   child: Column(
                     children: [
-                      ListTile(
-                        leading: const Icon(Icons.account_balance_wallet_outlined),
-                        title: const Text('Wallet'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          // Navigate to wallet tab in MainShell
-                          // Since we're in MainShell, we can't directly switch tabs
-                          // This is a placeholder - could use a callback or state management
-                        },
+                      _ProfileMenuItem(
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'Wallet',
+                        onTap: () {},
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.list_outlined),
-                        title: const Text('My Auctions'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.of(context).pushNamed('/sellerMyAuctions');
-                        },
+                      _ProfileMenuItem(
+                        icon: Icons.list_outlined,
+                        label: 'My Auctions',
+                        onTap: () => Navigator.of(context).pushNamed('/sellerMyAuctions'),
                       ),
                       const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.emoji_events_outlined),
-                        title: const Text('My Wins'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.of(context).pushNamed('/myWins');
-                        },
+                      _ProfileMenuItem(
+                        icon: Icons.emoji_events_outlined,
+                        label: 'My Wins',
+                        onTap: () => Navigator.of(context).pushNamed('/myWins'),
                       ),
                       if (role == 'admin') ...[
                         const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(Icons.admin_panel_settings),
-                          title: const Text('Admin Panel'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            Navigator.of(context).pushNamed('/adminPanel');
-                          },
+                        _ProfileMenuItem(
+                          icon: Icons.admin_panel_settings_outlined,
+                          label: 'Admin Panel',
+                          onTap: () => Navigator.of(context).pushNamed('/adminPanel'),
                         ),
                       ],
                     ],
                   ),
                 ),
-                
-                const SizedBox(height: 20),
-                
-                // Sign out button
+                const SizedBox(height: 24),
                 OutlinedButton.icon(
                   onPressed: () => _signOut(context),
-                  icon: const Icon(Icons.logout),
+                  icon: const Icon(Icons.logout, size: 20),
                   label: const Text('Sign Out'),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: AppTheme.border),
+                    foregroundColor: AppTheme.textSecondary,
                   ),
                 ),
               ],
@@ -353,5 +382,34 @@ class ProfilePage extends StatelessWidget {
       default:
         return 'Not Verified';
     }
+  }
+}
+
+class _ProfileMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ProfileMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Icon(icon, size: 22, color: AppTheme.textSecondary),
+      title: Text(
+        label,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textPrimary,
+            ),
+      ),
+      trailing: Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
+      onTap: onTap,
+    );
   }
 }

@@ -424,7 +424,16 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Auction'),
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          'Edit Auction',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+        ),
       ),
       body: Form(
         key: _formKey,

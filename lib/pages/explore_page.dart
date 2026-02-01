@@ -98,193 +98,142 @@ class _ExplorePageState extends State<ExplorePage> {
       appBar: AppBar(
         backgroundColor: AppTheme.primaryBlue,
         foregroundColor: Colors.white,
-        title: Row(
-          children: [
-            SizedBox(
-              width: AppTheme.headerLogoWidth,
-              height: AppTheme.headerLogoHeight,
-              child: Image.asset(
-                AppTheme.logoAssetLight,
-                fit: BoxFit.contain,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              'Explore',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-            ),
-          ],
+        title: SizedBox(
+          width: AppTheme.headerLogoWidth,
+          height: AppTheme.headerLogoHeight,
+          child: Image.asset(
+            AppTheme.logoAssetLight,
+            fit: BoxFit.contain,
+          ),
         ),
       ),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // Search field
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search auctions...',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  onChanged: (_) {
-                    setState(() {});
-                  },
-                ),
-              ),
-            ),
-            
-            // Active/Ended filter toggle
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.backgroundGrey,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ——— Compact fixed filter section ———
+            Container(
+              color: AppTheme.backgroundLight,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Search + Active/Ended on one row (compact)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
-                        child: _FilterToggle(
-                          label: 'Active',
-                          isSelected: _selectedFilter == 'Active',
-                          onTap: () {
-                            setState(() {
-                              _selectedFilter = 'Active';
-                            });
-                          },
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search...',
+                            isDense: true,
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                          onChanged: (_) => setState(() {}),
                         ),
                       ),
-                      Expanded(
-                        child: _FilterToggle(
-                          label: 'Ended',
-                          isSelected: _selectedFilter == 'Ended',
-                          onTap: () {
-                            setState(() {
-                              _selectedFilter = 'Ended';
-                            });
-                          },
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.backgroundGrey,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _FilterToggle(
+                              label: 'Active',
+                              isSelected: _selectedFilter == 'Active',
+                              onTap: () => setState(() => _selectedFilter = 'Active'),
+                            ),
+                            _FilterToggle(
+                              label: 'Ended',
+                              isSelected: _selectedFilter == 'Ended',
+                              onTap: () => setState(() => _selectedFilter = 'Ended'),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-            ),
-            
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 16),
-            ),
-            
-            // Category grid (6 top-level categories in order)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    const crossAxisCount = 2;
-                    const spacing = 12.0;
-                    const aspectRatio = 1.0;
-                    return GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: crossAxisCount,
-                      mainAxisSpacing: spacing,
-                      crossAxisSpacing: spacing,
-                      childAspectRatio: aspectRatio,
+                  const SizedBox(height: 8),
+                  // Category chips (horizontal, compact)
+                  SizedBox(
+                    height: 36,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
                       children: [
-                        _ExploreCategoryTile(
+                        _ExploreCategoryChip(
                           label: 'All',
                           isSelected: _selectedCategoryGroupId == null,
                           onTap: () => _onCategoryGroupTapped(null),
                         ),
-                        ..._categoryGroups.map((g) => _ExploreCategoryTile(
-                              label: g.nameEn,
-                              isSelected: _selectedCategoryGroupId == g.id,
-                              onTap: () => _onCategoryGroupTapped(g.id),
-                            )),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ),
-            if (_selectedCategoryGroupId != null && _subcategories.length >= 2)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        FilterChip(
-                          label: const Text('All'),
-                          selected: _selectedSubcategoryId == null,
-                          onSelected: (_) => setState(() => _selectedSubcategoryId = null),
-                          selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                          checkmarkColor: AppTheme.primaryBlue,
-                          side: BorderSide(
-                            color: _selectedSubcategoryId == null ? AppTheme.primaryBlue : AppTheme.border,
-                            width: 1,
-                          ),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        const SizedBox(width: 8),
-                        ..._subcategories.map((s) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text(s.nameEn),
-                                selected: _selectedSubcategoryId == s.id,
-                                onSelected: (_) => setState(() => _selectedSubcategoryId = s.id),
-                                selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                                checkmarkColor: AppTheme.primaryBlue,
-                                side: BorderSide(
-                                  color: _selectedSubcategoryId == s.id ? AppTheme.primaryBlue : AppTheme.border,
-                                  width: 1,
-                                ),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        const SizedBox(width: 6),
+                        ..._categoryGroups.map((g) => Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: _ExploreCategoryChip(
+                                label: g.nameEn,
+                                isSelected: _selectedCategoryGroupId == g.id,
+                                onTap: () => _onCategoryGroupTapped(g.id),
                               ),
                             )),
                       ],
                     ),
                   ),
-                ),
+                  if (_selectedCategoryGroupId != null && _subcategories.length >= 2) ...[
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 32,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _ExploreCategoryChip(
+                            label: 'All',
+                            isSelected: _selectedSubcategoryId == null,
+                            onTap: () => setState(() => _selectedSubcategoryId = null),
+                          ),
+                          const SizedBox(width: 6),
+                          ..._subcategories.map((s) => Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: _ExploreCategoryChip(
+                                  label: s.nameEn,
+                                  isSelected: _selectedSubcategoryId == s.id,
+                                  onTap: () => setState(() => _selectedSubcategoryId = s.id),
+                                ),
+                              )),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_selectedCategoryGroupId == 'watches' && _watchBrands.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    WatchBrandPicker(
+                      brands: _watchBrands,
+                      selectedBrandId: _selectedWatchBrandId,
+                      onChanged: (value) => setState(() => _selectedWatchBrandId = value),
+                      allowAll: true,
+                      label: 'Brand',
+                    ),
+                  ],
+                ],
               ),
-            if (_selectedCategoryGroupId == 'watches' && _watchBrands.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                  child: WatchBrandPicker(
-                    brands: _watchBrands,
-                    selectedBrandId: _selectedWatchBrandId,
-                    onChanged: (value) => setState(() => _selectedWatchBrandId = value),
-                    allowAll: true,
-                    label: 'Brand',
-                  ),
-                ),
-              ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 20),
             ),
-            
-            // Grid of auction cards
-            StreamBuilder<QuerySnapshot>(
+            // ——— Auction list (horizontal rows, scrollable) ———
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
               stream: _auctionService.streamAllAuctions(limit: 50),
               builder: (context, snapshot) {
                 if (kDebugMode) {
@@ -292,90 +241,77 @@ class _ExplorePageState extends State<ExplorePage> {
                 }
 
                 if (snapshot.hasError) {
-                  return SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              size: 48,
-                              color: AppTheme.error,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Error loading auctions',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.error,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${snapshot.error}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: () {
-                                setState(() {});
-                              },
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
+                  return Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 40,
+                            color: AppTheme.error,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Error loading auctions',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  color: AppTheme.error,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${snapshot.error}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {});
+                            },
+                            child: const Text('Retry'),
+                          ),
+                        ],
                       ),
                     ),
                   );
                 }
 
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  // Grid skeleton
-                  return SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.75,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) => _SkeletonGridCard(),
-                        childCount: 4,
-                      ),
-                    ),
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    children: List.generate(6, (_) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _ExploreRowSkeleton(),
+                    )),
                   );
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.inbox_outlined,
-                              size: 64,
-                              color: AppTheme.textTertiary,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _selectedFilter == 'Active'
-                                  ? 'No active auctions yet'
-                                  : 'No ended auctions yet',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                            ),
-                          ],
-                        ),
+                  return Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.inbox_outlined,
+                            size: 48,
+                            color: AppTheme.textTertiary,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _selectedFilter == 'Active'
+                                ? 'No active auctions yet'
+                                : 'No ended auctions yet',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -446,91 +382,73 @@ class _ExplorePageState extends State<ExplorePage> {
                 });
 
                 if (filteredDocs.isEmpty) {
-                  return SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.search_off,
-                              size: 64,
-                              color: AppTheme.textTertiary,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No auctions match your filters',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                            ),
-                          ],
-                        ),
+                  return Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_off,
+                            size: 48,
+                            color: AppTheme.textTertiary,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No auctions match your filters',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                          ),
+                        ],
                       ),
                     ),
                   );
                 }
 
-                return SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  sliver: SliverGrid(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.75,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final doc = filteredDocs[index];
-                        final data = doc.data() as Map<String, dynamic>;
-                        final auctionId = doc.id;
-                        
-                        final title = data['title'] as String? ?? 'Untitled Auction';
-                        final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
-                        final endsAt = data['endsAt'] as Timestamp?;
-                        final state = data['state'] as String? ?? 'UNKNOWN';
-                        final category = effectiveSubcategory(data);
-                        // Get primary image URL from images array
-                        final images = data['images'] as List<dynamic>?;
-                        String? imageUrl;
-                        if (images != null && images.isNotEmpty) {
-                          // Find primary image, or use first image
-                          final primaryImage = images.firstWhere(
-                            (img) => img is Map && (img['isPrimary'] == true),
-                            orElse: () => images.first,
-                          );
-                          if (primaryImage is Map) {
-                            imageUrl = primaryImage['url'] as String?;
-                          } else if (primaryImage is String) {
-                            // Legacy format: array of strings
-                            imageUrl = primaryImage;
-                          }
+                // Vertical list of wide horizontal cards (easy to scan)
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: filteredDocs.length,
+                  itemBuilder: (context, index) {
+                    final doc = filteredDocs[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final auctionId = doc.id;
+                    final title = data['title'] as String? ?? 'Untitled';
+                    final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
+                    final endsAt = data['endsAt'] as Timestamp?;
+                    final state = data['state'] as String? ?? '';
+                    final isEnded = _isEndedState(state);
+                    final images = data['images'] as List<dynamic>?;
+                    String? imageUrl;
+                    if (images != null && images.isNotEmpty) {
+                      for (final e in images) {
+                        if (e is Map && (e['isPrimary'] == true)) {
+                          imageUrl = e['url'] as String?;
+                          break;
                         }
-                        
-                        final isEnded = _isEndedState(state);
-                        final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);
-                        
-                        return _ExploreGridCard(
-                          auctionId: auctionId,
-                          title: title,
-                          currentPrice: currentPrice,
-                          timeLeft: timeLeft,
-                          category: category,
-                          imageUrl: imageUrl,
-                          isEnded: isEnded,
-                        );
-                      },
-                      childCount: filteredDocs.length,
-                    ),
-                  ),
+                      }
+                      if (imageUrl == null && images.isNotEmpty) {
+                        final first = images.first;
+                        if (first is Map) imageUrl = first['url'] as String?;
+                        else if (first is String) imageUrl = first;
+                      }
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _ExploreRowCard(
+                        auctionId: auctionId,
+                        title: title,
+                        currentPrice: currentPrice,
+                        timeLeft: _formatTimeLeft(endsAt),
+                        isEnded: isEnded,
+                        imageUrl: imageUrl,
+                      ),
+                    );
+                  },
                 );
               },
             ),
-            
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 20),
             ),
           ],
         ),
@@ -585,6 +503,52 @@ class _ExploreCategoryTile extends StatelessWidget {
   }
 }
 
+/// Compact chip for category/subcategory filter row.
+class _ExploreCategoryChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ExploreCategoryChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
+              width: isSelected ? 1.5 : 1,
+            ),
+            color: isSelected ? AppTheme.primaryBlue.withValues(alpha: 0.12) : AppTheme.surface,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+                ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FilterToggle extends StatelessWidget {
   final String label;
   final bool isSelected;
@@ -600,17 +564,17 @@ class _FilterToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Center(
           child: Text(
             label,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
                   color: isSelected ? Colors.white : AppTheme.textSecondary,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
@@ -666,6 +630,179 @@ class _SkeletonGridCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Wide horizontal row card for Explore (vertical list, easy to scan).
+class _ExploreRowCard extends StatelessWidget {
+  final String auctionId;
+  final String title;
+  final double currentPrice;
+  final String timeLeft;
+  final bool isEnded;
+  final String? imageUrl;
+
+  const _ExploreRowCard({
+    required this.auctionId,
+    required this.title,
+    required this.currentPrice,
+    required this.timeLeft,
+    required this.isEnded,
+    this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      child: InkWell(
+        onTap: () => Navigator.pushNamed(context, '/auctionDetail?auctionId=$auctionId'),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.border),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: imageUrl != null && imageUrl!.isNotEmpty
+                      ? Image.network(
+                          imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _ExploreChipPlaceholder(),
+                        )
+                      : _ExploreChipPlaceholder(),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'AED ${currentPrice.toStringAsFixed(0)}',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: AppTheme.primaryBlue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          isEnded ? Icons.check_circle_outline : Icons.access_time,
+                          size: 14,
+                          color: AppTheme.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          timeLeft,
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Skeleton for Explore row card (loading state).
+class _ExploreRowSkeleton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: AppTheme.backgroundGrey,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 14,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 14,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 12,
+                  width: 60,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExploreChipPlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.backgroundGrey,
+      child: Center(child: Icon(Icons.image_outlined, size: 28, color: AppTheme.textTertiary)),
     );
   }
 }
