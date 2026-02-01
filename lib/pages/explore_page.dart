@@ -90,8 +90,8 @@ class _ExplorePageState extends State<ExplorePage> {
         title: Row(
           children: [
             SizedBox(
-              width: 48,
-              height: 28,
+              width: 90,
+              height: 52,
               child: Image.asset(
                 'assets/branding/logo_light.png',
                 fit: BoxFit.contain,
@@ -486,6 +486,52 @@ class _ExplorePageState extends State<ExplorePage> {
               child: SizedBox(height: 20),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExploreCategoryTile extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ExploreCategoryTile({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
+              width: isSelected ? 2 : 1,
+            ),
+            color: isSelected ? AppTheme.primaryBlue.withValues(alpha: 0.08) : AppTheme.surface,
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? AppTheme.primaryBlue : AppTheme.textPrimary,
+                  ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ),
       ),
     );

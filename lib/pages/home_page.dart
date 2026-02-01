@@ -71,12 +71,12 @@ class _HomePageState extends State<HomePage> {
             // Top bar with logo and title
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 80,
-                      height: 44,
+                      width: 96,
+                      height: 52,
                       child: Image.asset(
                         'assets/branding/logo_light.png',
                         fit: BoxFit.contain,
