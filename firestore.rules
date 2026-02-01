@@ -216,5 +216,25 @@ service cloud.firestore {
       // Writes only by backend (Cloud Functions) - block all client writes
       allow write: if false;
     }
+    
+    // Support tickets (contact form submissions)
+    match /supportTickets/{ticketId} {
+      // Authenticated users can create; admins can read all
+      allow create: if request.auth != null;
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+    
+    // FAQ (read by all authenticated)
+    match /faq/{faqId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    
+    // Content (terms, etc.) - read by all authenticated
+    match /content/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
   }
 }

@@ -3,6 +3,7 @@ import 'home_page.dart';
 import 'explore_page.dart';
 import 'wallet_page.dart';
 import 'profile_page.dart';
+import 'more_page.dart';
 import '../theme/app_theme.dart';
 
 class MainShell extends StatefulWidget {
@@ -20,6 +21,7 @@ class _MainShellState extends State<MainShell> {
     ExplorePage(),
     WalletPage(),
     ProfilePage(),
+    MorePage(),
   ];
 
   @override
@@ -59,6 +61,11 @@ class _MainShellState extends State<MainShell> {
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Profile',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.more_horiz),
+            selectedIcon: Icon(Icons.more_horiz),
+            label: 'More',
           ),
         ],
       ),
