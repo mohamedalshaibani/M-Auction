@@ -120,6 +120,12 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['winnerContactReleased']))
       );
       
+      // Delete: seller can delete their own DRAFT or PENDING_APPROVAL auction only
+      allow delete: if request.auth != null &&
+                      resource.data.sellerId == request.auth.uid &&
+                      (resource.data.ownerUid == request.auth.uid || !('ownerUid' in resource.data)) &&
+                      (resource.data.state == 'DRAFT' || resource.data.state == 'PENDING_APPROVAL');
+      
       // Bids subcollection
       match /bids/{bidId} {
         // Anyone authenticated can read bids (for all auction states)

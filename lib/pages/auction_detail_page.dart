@@ -546,82 +546,103 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
             ),
           ),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: isDraft
                 ? _buildDraftAuctionUI(data, isSeller, state)
                 : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(
-                  data['title'] as String? ?? 'Untitled',
-                  style: Theme.of(context).textTheme.headlineSmall,
+                // Details section
+                _buildDetailRow('Brand', effectiveBrandDisplay(data)),
+                const SizedBox(height: 10),
+                _buildDetailRow(
+                  'Category',
+                  '${categoryGroupDisplayName(effectiveCategoryGroup(data))} / ${subcategoryDisplayName(effectiveSubcategory(data))}',
                 ),
-                const SizedBox(height: 8),
-                Text('Brand: ${effectiveBrandDisplay(data)}'),
+                const SizedBox(height: 10),
+                _buildDetailRow('Condition', (data['condition'] as String? ?? '—').toString()),
+                const SizedBox(height: 10),
+                _buildDetailRow('Item ID', data['itemIdentifier'] as String? ?? '—'),
+                const SizedBox(height: 20),
+                const Divider(height: 1),
+                const SizedBox(height: 20),
+                // Description
                 Text(
-                  'Category: ${categoryGroupDisplayName(effectiveCategoryGroup(data))} / ${subcategoryDisplayName(effectiveSubcategory(data))}',
-                ),
-                Text('Condition: ${data['condition'] ?? 'Unknown'}'),
-                Text('Item ID: ${data['itemIdentifier'] ?? 'N/A'}'),
-                const SizedBox(height: 16),
-                Text(
-                  'Description:',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(data['description'] as String? ?? 'No description'),
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Current Price:',
-                        style: Theme.of(context).textTheme.titleMedium,
+                  'Description',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 0.5,
                       ),
-                      const SizedBox(height: 8),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  data['description'] as String? ?? 'No description',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textPrimary,
+                        height: 1.45,
+                      ),
+                ),
+                const SizedBox(height: 24),
+                const Divider(height: 1),
+                const SizedBox(height: 20),
+                // Current price card
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Current price',
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${data['bidCount'] ?? 0} bids',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textTertiary,
+                                ),
+                          ),
+                        ],
+                      ),
                       Text(
-                        currentPrice.toStringAsFixed(2),
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
+                        'AED ${currentPrice.toStringAsFixed(2)}',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               color: AppTheme.primaryBlue,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.5,
                             ),
                       ),
-                      const SizedBox(height: 8),
-                      Text('Bids: ${data['bidCount'] ?? 0}'),
-                      // Debug: show snapshot metadata
-                      Text(
-                        'DEBUG: cache=${auctionSnapshot.data?.metadata.isFromCache ?? false} pending=${auctionSnapshot.data?.metadata.hasPendingWrites ?? false}',
-                        style: const TextStyle(fontSize: 10, color: Colors.grey),
-                      ),
-                      if (isActive) ...[
-                        const SizedBox(height: 8),
-                        CountdownText(endsAt: endsAtTs),
-                        Text(
-                          'DEBUG endsAt: ${endsAtTs?.toDate().toIso8601String() ?? "null"}',
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                      ],
-                      if (isEnded && winnerId != null) ...[
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Status: Ended',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.error,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
+                if (isActive) ...[
+                  const SizedBox(height: 12),
+                  CountdownText(endsAt: endsAtTs),
+                ],
+                if (isEnded && winnerId != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Auction ended',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: AppTheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
                 // Deposit requirement for active auctions
                 if (isActive &&
                     !isSeller &&
@@ -1898,61 +1919,106 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                   ),
                 ],
                 const SizedBox(height: 24),
+                const Divider(height: 1),
+                const SizedBox(height: 20),
                 Text(
-                  'Recent Bids:',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  'Recent bids',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 StreamBuilder<QuerySnapshot>(
                   stream: _auctionService.streamBids(widget.auctionId),
                   builder: (context, bidsSnapshot) {
                     if (bidsSnapshot.hasError) {
-                      return Text('Error: ${bidsSnapshot.error}');
+                      return Text(
+                        'Unable to load bids',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppTheme.error,
+                            ),
+                      );
                     }
 
                     if (bidsSnapshot.connectionState == ConnectionState.waiting) {
-                      return const CircularProgressIndicator();
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )),
+                      );
                     }
 
                     if (!bidsSnapshot.hasData ||
                         bidsSnapshot.data!.docs.isEmpty) {
-                      return const Text('No bids yet');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Text(
+                          'No bids yet',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: AppTheme.textTertiary,
+                              ),
+                        ),
+                      );
                     }
 
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: bidsSnapshot.data!.docs.length,
-                      itemBuilder: (context, index) {
-                        final bidDoc = bidsSnapshot.data!.docs[index];
-                        final bidData = bidDoc.data() as Map<String, dynamic>;
-                        final amount =
-                            (bidData['amount'] as num?)?.toDouble() ?? 0.0;
-                        final createdAt = bidData['createdAt'] as Timestamp?;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: bidsSnapshot.data!.docs.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final bidDoc = bidsSnapshot.data!.docs[index];
+                          final bidData = bidDoc.data() as Map<String, dynamic>;
+                          final amount =
+                              (bidData['amount'] as num?)?.toDouble() ?? 0.0;
+                          final createdAt = bidData['createdAt'] as Timestamp?;
 
-                        String timeText = 'Unknown';
-                        if (createdAt != null) {
-                          final now = DateTime.now();
-                          final created = createdAt.toDate();
-                          final diff = now.difference(created);
-
-                          if (diff.inDays > 0) {
-                            timeText = '${diff.inDays}d ago';
-                          } else if (diff.inHours > 0) {
-                            timeText = '${diff.inHours}h ago';
-                          } else if (diff.inMinutes > 0) {
-                            timeText = '${diff.inMinutes}m ago';
-                          } else {
-                            timeText = 'Just now';
+                          String timeText = '—';
+                          if (createdAt != null) {
+                            final now = DateTime.now();
+                            final created = createdAt.toDate();
+                            final diff = now.difference(created);
+                            if (diff.inDays > 0) {
+                              timeText = '${diff.inDays}d ago';
+                            } else if (diff.inHours > 0) {
+                              timeText = '${diff.inHours}h ago';
+                            } else if (diff.inMinutes > 0) {
+                              timeText = '${diff.inMinutes}m ago';
+                            } else {
+                              timeText = 'Just now';
+                            }
                           }
-                        }
 
-                        return ListTile(
-                          title: Text(amount.toStringAsFixed(2)),
-                          subtitle: Text(timeText),
-                          dense: true,
-                        );
-                      },
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'AED ${amount.toStringAsFixed(2)}',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                ),
+                                Text(
+                                  timeText,
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: AppTheme.textTertiary,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     );
                   },
                 ),
