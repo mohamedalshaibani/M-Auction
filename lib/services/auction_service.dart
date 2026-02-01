@@ -59,8 +59,67 @@ class AuctionService {
     return auctionRef.id;
   }
 
-  // Submit for approval
+  // Submit for approval with validation
   Future<void> submitForApproval(String auctionId) async {
+    // Fetch auction to validate
+    final auctionDoc = await _firestore.collection('auctions').doc(auctionId).get();
+    if (!auctionDoc.exists) {
+      throw Exception('Auction not found');
+    }
+
+    final data = auctionDoc.data() as Map<String, dynamic>;
+    final state = data['state'] as String?;
+
+    // Verify state is DRAFT
+    if (state != 'DRAFT') {
+      throw Exception('Only DRAFT auctions can be submitted for approval');
+    }
+
+    // Validation: Required fields
+    final title = data['title'] as String?;
+    final description = data['description'] as String?;
+    final condition = data['condition'] as String?;
+    final itemIdentifier = data['itemIdentifier'] as String?;
+    final startPrice = (data['startPrice'] as num?)?.toDouble() ?? 0.0;
+    final brand = data['brand'] as String?;
+
+    if (title == null || title.trim().isEmpty) {
+      throw Exception('Title is required');
+    }
+    if (description == null || description.trim().isEmpty) {
+      throw Exception('Description is required');
+    }
+    if (condition == null || condition.trim().isEmpty) {
+      throw Exception('Condition is required');
+    }
+    if (itemIdentifier == null || itemIdentifier.trim().isEmpty) {
+      throw Exception('Item identifier is required');
+    }
+    if (brand == null || brand.trim().isEmpty) {
+      throw Exception('Brand is required');
+    }
+    if (startPrice <= 0) {
+      throw Exception('Start price must be greater than 0');
+    }
+
+    // Validation: At least 1 image
+    final images = data['images'] as List<dynamic>?;
+    if (images == null || images.isEmpty) {
+      throw Exception('At least one image is required');
+    }
+
+    // Check that at least one image is ready (has url)
+    final hasReadyImage = images.any((img) {
+      if (img is! Map<String, dynamic>) return false;
+      final url = img['url'] as String?;
+      return url != null && url.isNotEmpty;
+    });
+
+    if (!hasReadyImage) {
+      throw Exception('Please wait for images to finish processing');
+    }
+
+    // All validations passed - submit for approval
     await _firestore.collection('auctions').doc(auctionId).update({
       'state': 'PENDING_APPROVAL',
       'updatedAt': FieldValue.serverTimestamp(),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/admin_settings_service.dart';
+import '../services/auction_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/auction_image_uploader.dart';
 
 class EditDraftAuctionPage extends StatefulWidget {
@@ -29,10 +31,12 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
   List<String> _watchBrands = [];
   List<int> _durationOptions = [];
   bool _isLoading = false;
+  bool _isSubmitting = false;
   String? _error;
   bool _isLoadingData = true;
 
   final AdminSettingsService _adminSettings = AdminSettingsService();
+  final AuctionService _auctionService = AuctionService();
 
   @override
   void initState() {
@@ -160,13 +164,78 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Auction updated successfully')),
+          const SnackBar(
+            content: Text('Auction updated successfully'),
+            backgroundColor: AppTheme.success,
+          ),
         );
       }
     } catch (e) {
       setState(() {
         _error = 'Error updating auction: $e';
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _submitForApproval() async {
+    // First save current changes
+    if (!_formKey.currentState!.validate()) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _error = 'User not logged in');
+      return;
+    }
+
+    if (_selectedBrand == null || _selectedDurationDays == null) {
+      setState(() => _error = 'Please select brand and duration');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+
+    try {
+      final startPrice = double.parse(_startPriceController.text);
+
+      // First, update auction with current changes
+      await FirebaseFirestore.instance
+          .collection('auctions')
+          .doc(widget.auctionId)
+          .update({
+        'category': _selectedCategory,
+        'brand': _selectedBrand!,
+        'title': _titleController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'condition': _conditionController.text.trim(),
+        'itemIdentifier': _itemIdentifierController.text.trim(),
+        'startPrice': startPrice,
+        'currentPrice': startPrice,
+        'durationDays': _selectedDurationDays!,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Then submit for approval (which validates)
+      await _auctionService.submitForApproval(widget.auctionId);
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Auction submitted for admin approval'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _isSubmitting = false;
       });
     }
   }
@@ -312,21 +381,58 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.red),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.error),
+                ),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: AppTheme.error),
+                ),
               ),
             ],
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _save,
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save Changes'),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isLoading || _isSubmitting ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.textSecondary,
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save Changes'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading || _isSubmitting ? null : _submitForApproval,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                    ),
+                    icon: _isSubmitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.send),
+                    label: Text(_isSubmitting ? 'Submitting...' : 'Submit'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

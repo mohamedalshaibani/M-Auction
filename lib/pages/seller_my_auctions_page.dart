@@ -14,6 +14,7 @@ class SellerMyAuctionsPage extends StatefulWidget {
 
 class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
   final AuctionService _auctionService = AuctionService();
+  bool _isSubmitting = false;
 
   void _payListingFee(String auctionId, double amount) {
     Navigator.of(context).push<bool>(
@@ -36,6 +37,37 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
         );
       }
     });
+  }
+
+  Future<void> _submitForApproval(String auctionId) async {
+    setState(() => _isSubmitting = true);
+    
+    try {
+      await _auctionService.submitForApproval(auctionId);
+      
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Auction submitted for admin approval'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
+          backgroundColor: AppTheme.error,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -173,6 +205,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
               final listingFeeAmount = (data['listingFeeAmount'] as num?)?.toDouble();
               final listingFeePaid = data['listingFeePaid'] as bool? ?? false;
               final needsPayment = state == 'APPROVED_AWAITING_PAYMENT' && !listingFeePaid && listingFeeAmount != null;
+              final isDraft = state == 'DRAFT';
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -191,6 +224,55 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                       ),
                       const SizedBox(height: 4),
                       Text('Current: ${currentPrice.toStringAsFixed(2)}'),
+                      if (isDraft) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.primaryBlue),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Ready to submit?',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Make sure you\'ve added images and filled all required fields.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _isSubmitting ? null : () => _submitForApproval(auctionId),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryBlue,
+                                  ),
+                                  icon: _isSubmitting 
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
+                                        )
+                                      : const Icon(Icons.send),
+                                  label: Text(_isSubmitting ? 'Submitting...' : 'Submit for Approval'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       if (needsPayment) ...[
                         const SizedBox(height: 12),
                         Container(
