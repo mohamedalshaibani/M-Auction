@@ -26,6 +26,8 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
   final ContractService _contractService = ContractService();
   bool _isPlacingBid = false;
   bool _isProcessing = false;
+  bool _isSubmitting = false;
+  bool _isDeleting = false;
   String? _bidError;
   Map<String, dynamic>? _depositCheck;
 
@@ -198,6 +200,94 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
       if (mounted) {
         setState(() => _isProcessing = false);
       }
+    }
+  }
+
+  Future<void> _submitForApproval() async {
+    setState(() => _isSubmitting = true);
+    
+    try {
+      await _auctionService.submitForApproval(widget.auctionId);
+      
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Auction submitted for admin approval'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
+          backgroundColor: AppTheme.error,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  Future<void> _deleteDraft() async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Draft?'),
+        content: const Text(
+          'This will permanently delete this draft auction and all uploaded images. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeleting = true);
+
+    try {
+      // Delete auction document (Storage trigger will handle image cleanup)
+      await FirebaseFirestore.instance
+          .collection('auctions')
+          .doc(widget.auctionId)
+          .delete();
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Draft deleted successfully'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting draft: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      
+      setState(() => _isDeleting = false);
     }
   }
 
@@ -449,25 +539,12 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            actions: [
-              // Edit button for draft auctions
-              if (isDraft && isSeller)
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => EditDraftAuctionPage(auctionId: widget.auctionId),
-                      ),
-                    );
-                  },
-                  tooltip: 'Edit Auction',
-                ),
-            ],
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: Column(
+            child: isDraft
+                ? _buildDraftAuctionUI(data, isSeller, state)
+                : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
@@ -1928,6 +2005,388 @@ class _CountdownTextState extends State<CountdownText> {
     return Text(
       'Time left: ${_formatTimeLeft(widget.endsAt)}',
       style: const TextStyle(fontWeight: FontWeight.bold),
+    );
+  }
+
+  Widget _buildDraftAuctionUI(
+    Map<String, dynamic> data,
+    bool isSeller,
+    String state,
+  ) {
+    final images = data['images'] as List<dynamic>?;
+    final hasImages = images != null && images.isNotEmpty;
+    final imagesWithUrl = images?.where((img) {
+      if (img is! Map<String, dynamic>) return false;
+      final url = img['url'] as String?;
+      return url != null && url.isNotEmpty;
+    }).toList();
+    final imageCount = imagesWithUrl?.length ?? 0;
+    final isPending = state == 'PENDING_APPROVAL';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Status Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isPending 
+                ? AppTheme.warning.withValues(alpha: 0.1)
+                : AppTheme.primaryBlue.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isPending 
+                  ? AppTheme.warning 
+                  : AppTheme.primaryBlue,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isPending ? Icons.hourglass_empty : Icons.edit_document,
+                color: isPending ? AppTheme.warning : AppTheme.primaryBlue,
+                size: 32,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isPending ? 'Pending Approval' : 'Draft',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isPending
+                          ? 'Your auction is being reviewed by admin'
+                          : 'Complete and submit for approval',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Images Card
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.photo_library, color: AppTheme.primaryBlue),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Images',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: imageCount >= 1
+                            ? AppTheme.success.withValues(alpha: 0.1)
+                            : AppTheme.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: imageCount >= 1 ? AppTheme.success : AppTheme.error,
+                        ),
+                      ),
+                      child: Text(
+                        '$imageCount/6',
+                        style: TextStyle(
+                          color: imageCount >= 1 ? AppTheme.success : AppTheme.error,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (hasImages && imagesWithUrl!.isNotEmpty)
+                  SizedBox(
+                    height: 120,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: imagesWithUrl.length,
+                      itemBuilder: (context, index) {
+                        final img = imagesWithUrl[index] as Map<String, dynamic>;
+                        final url = img['url'] as String;
+                        final isPrimary = img['isPrimary'] as bool? ?? false;
+
+                        return Container(
+                          margin: const EdgeInsets.only(right: 12),
+                          width: 120,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isPrimary ? AppTheme.primaryBlue : Colors.grey[300]!,
+                              width: isPrimary ? 3 : 1,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.network(
+                                  url,
+                                  fit: BoxFit.cover,
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return const Center(
+                                      child: CircularProgressIndicator(),
+                                    );
+                                  },
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Icon(Icons.broken_image, size: 48);
+                                  },
+                                ),
+                                if (isPrimary)
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primaryBlue,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Icon(
+                                        Icons.star,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  )
+                else
+                  Container(
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_photo_alternate, size: 48, color: Colors.grey),
+                          SizedBox(height: 8),
+                          Text(
+                            'No images uploaded yet',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Auction Details Card
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.description, color: AppTheme.primaryBlue),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Auction Details',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildDetailRow('Title', data['title'] as String? ?? 'Not set'),
+                _buildDetailRow('Brand', data['brand'] as String? ?? 'Not set'),
+                _buildDetailRow('Category', data['category'] as String? ?? 'Not set'),
+                _buildDetailRow('Condition', data['condition'] as String? ?? 'Not set'),
+                _buildDetailRow('Item ID', data['itemIdentifier'] as String? ?? 'Not set'),
+                _buildDetailRow(
+                  'Start Price', 
+                  'AED ${((data['startPrice'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}',
+                ),
+                _buildDetailRow(
+                  'Duration',
+                  '${data['durationDays'] ?? 'Not set'} days',
+                ),
+                const SizedBox(height: 12),
+                const Divider(),
+                const SizedBox(height: 12),
+                Text(
+                  'Description',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  data['description'] as String? ?? 'No description provided',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        if (isSeller && !isPending) ...[
+          const SizedBox(height: 24),
+          // Action Buttons for DRAFT state
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _isDeleting || _isSubmitting
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EditDraftAuctionPage(
+                                auctionId: widget.auctionId,
+                              ),
+                            ),
+                          );
+                        },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    side: const BorderSide(color: AppTheme.primaryBlue),
+                  ),
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  onPressed: _isDeleting || _isSubmitting ? null : _submitForApproval,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryBlue,
+                    padding: const EdgeInsets.all(16),
+                  ),
+                  icon: _isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.send),
+                  label: Text(_isSubmitting ? 'Submitting...' : 'Submit for Approval'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isDeleting || _isSubmitting ? null : _deleteDraft,
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.all(16),
+                side: const BorderSide(color: AppTheme.error),
+                foregroundColor: AppTheme.error,
+              ),
+              icon: _isDeleting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppTheme.error),
+                      ),
+                    )
+                  : const Icon(Icons.delete_outline),
+              label: Text(_isDeleting ? 'Deleting...' : 'Delete Draft'),
+            ),
+          ),
+        ] else if (isPending) ...[
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.warning),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: AppTheme.warning),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Your auction is awaiting admin approval. You will be notified once it\'s reviewed.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
