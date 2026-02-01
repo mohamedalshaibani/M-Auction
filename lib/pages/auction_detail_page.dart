@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
+import '../models/category_model.dart';
 import '../services/auction_service.dart';
 import '../services/contract_service.dart';
 import '../theme/app_theme.dart';
@@ -556,7 +557,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                 ),
                 const SizedBox(height: 8),
                 Text('Brand: ${data['brand'] ?? 'Unknown'}'),
-                Text('Category: ${data['category'] ?? 'Unknown'}'),
+                Text(
+                  'Category: ${categoryGroupDisplayName(effectiveCategoryGroup(data))} / ${subcategoryDisplayName(effectiveSubcategory(data))}',
+                ),
                 Text('Condition: ${data['condition'] ?? 'Unknown'}'),
                 Text('Item ID: ${data['itemIdentifier'] ?? 'N/A'}'),
                 const SizedBox(height: 16),
@@ -2183,7 +2186,10 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                 const SizedBox(height: 16),
                 _buildDetailRow('Title', data['title'] as String? ?? 'Not set'),
                 _buildDetailRow('Brand', data['brand'] as String? ?? 'Not set'),
-                _buildDetailRow('Category', data['category'] as String? ?? 'Not set'),
+                _buildDetailRow(
+                  'Category',
+                  '${categoryGroupDisplayName(effectiveCategoryGroup(data))} / ${subcategoryDisplayName(effectiveSubcategory(data))}',
+                ),
                 _buildDetailRow('Condition', data['condition'] as String? ?? 'Not set'),
                 _buildDetailRow('Item ID', data['itemIdentifier'] as String? ?? 'Not set'),
                 _buildDetailRow(

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/admin_settings_service.dart';
 import '../services/auction_service.dart';
+import '../models/category_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/auction_image_uploader.dart';
 
@@ -22,8 +23,12 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
   final _conditionController = TextEditingController();
   final _itemIdentifierController = TextEditingController();
   final _startPriceController = TextEditingController();
+  final _brandTextController = TextEditingController();
 
-  String _selectedCategory = 'bags';
+  List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
+  List<Subcategory> _subcategories = defaultSubcategories.where((s) => s.parentId == 'bags').toList();
+  String _selectedCategoryGroupId = 'bags';
+  String? _selectedSubcategoryId;
   String? _selectedBrand;
   int? _selectedDurationDays;
 
@@ -90,12 +95,21 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         return;
       }
 
+      final groupId = data['categoryGroup'] as String? ?? legacyCategoryToGroup(data['category'] as String?);
+      final subId = data['subcategory'] as String? ?? data['category'] as String? ?? 'bags';
+      final groups = await _adminSettings.getTopLevelCategories();
+      final subs = await _adminSettings.getSubcategories(groupId);
+      if (!mounted) return;
       setState(() {
         _bagBrands = bagBrands;
         _watchBrands = watchBrands;
         _durationOptions = durations;
-        _selectedCategory = data['category'] as String? ?? 'bags';
+        _categoryGroups = groups;
+        _selectedCategoryGroupId = groupId;
+        _subcategories = subs;
+        _selectedSubcategoryId = subs.any((s) => s.id == subId) ? subId : (subs.isNotEmpty ? subs.first.id : null);
         _selectedBrand = data['brand'] as String?;
+        _brandTextController.text = (groupId != 'bags' && groupId != 'watches') ? (data['brand'] as String? ?? '') : '';
         _selectedDurationDays = data['durationDays'] as int?;
         _titleController.text = data['title'] as String? ?? '';
         _descriptionController.text = data['description'] as String? ?? '';
@@ -119,7 +133,27 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
     _conditionController.dispose();
     _itemIdentifierController.dispose();
     _startPriceController.dispose();
+    _brandTextController.dispose();
     super.dispose();
+  }
+
+  Future<void> _onCategoryGroupChanged(String groupId) async {
+    final subs = await _adminSettings.getSubcategories(groupId);
+    if (!mounted) return;
+    setState(() {
+      _selectedCategoryGroupId = groupId;
+      _subcategories = subs;
+      _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
+      if (groupId == 'bags') {
+        _selectedBrand = _bagBrands.isNotEmpty ? _bagBrands.first : null;
+        _brandTextController.clear();
+      } else if (groupId == 'watches') {
+        _selectedBrand = _watchBrands.isNotEmpty ? _watchBrands.first : null;
+        _brandTextController.clear();
+      } else {
+        _selectedBrand = null;
+      }
+    });
   }
 
   Future<void> _save() async {
@@ -131,8 +165,15 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       return;
     }
 
-    if (_selectedBrand == null || _selectedDurationDays == null) {
-      setState(() => _error = 'Please select brand and duration');
+    if (_selectedSubcategoryId == null || _selectedDurationDays == null) {
+      setState(() => _error = 'Please select category and duration');
+      return;
+    }
+    final brand = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches'
+        ? (_selectedBrand ?? '')
+        : _brandTextController.text.trim();
+    if (brand.isEmpty) {
+      setState(() => _error = 'Please select or enter brand');
       return;
     }
 
@@ -149,8 +190,10 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
           .collection('auctions')
           .doc(widget.auctionId)
           .update({
-        'category': _selectedCategory,
-        'brand': _selectedBrand!,
+        'categoryGroup': _selectedCategoryGroupId,
+        'subcategory': _selectedSubcategoryId!,
+        'category': _selectedSubcategoryId!,
+        'brand': brand,
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'condition': _conditionController.text.trim(),
@@ -196,9 +239,18 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       return;
     }
 
-    if (_selectedBrand == null || _selectedDurationDays == null) {
+    if (_selectedSubcategoryId == null || _selectedDurationDays == null) {
       if (mounted) {
-        setState(() => _error = 'Please select brand and duration');
+        setState(() => _error = 'Please select category and duration');
+      }
+      return;
+    }
+    final brandForSubmit = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches'
+        ? (_selectedBrand ?? '')
+        : _brandTextController.text.trim();
+    if (brandForSubmit.isEmpty) {
+      if (mounted) {
+        setState(() => _error = 'Please select or enter brand');
       }
       return;
     }
@@ -218,8 +270,10 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
           .collection('auctions')
           .doc(widget.auctionId)
           .update({
-        'category': _selectedCategory,
-        'brand': _selectedBrand!,
+        'categoryGroup': _selectedCategoryGroupId,
+        'subcategory': _selectedSubcategoryId!,
+        'category': _selectedSubcategoryId!,
+        'brand': brandForSubmit,
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'condition': _conditionController.text.trim(),
@@ -272,8 +326,8 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       );
     }
 
-    final availableBrands =
-        _selectedCategory == 'bags' ? _bagBrands : _watchBrands;
+    final useBrandDropdown = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches';
+    final availableBrands = _selectedCategoryGroupId == 'bags' ? _bagBrands : _watchBrands;
 
     return Scaffold(
       appBar: AppBar(
@@ -285,35 +339,39 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
           padding: const EdgeInsets.all(16),
           children: [
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              value: _selectedCategoryGroupId,
               decoration: const InputDecoration(labelText: 'Category'),
-              items: const [
-                DropdownMenuItem(value: 'bags', child: Text('Bags')),
-                DropdownMenuItem(value: 'watches', child: Text('Watches')),
-              ],
+              items: _categoryGroups
+                  .map((g) => DropdownMenuItem(value: g.id, child: Text(g.nameEn)))
+                  .toList(),
               onChanged: (value) {
-                setState(() {
-                  _selectedCategory = value ?? 'bags';
-                  _selectedBrand = availableBrands.isNotEmpty
-                      ? availableBrands.first
-                      : null;
-                });
+                if (value != null) _onCategoryGroupChanged(value);
               },
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedBrand,
-              decoration: const InputDecoration(labelText: 'Brand'),
-              items: availableBrands
-                  .map((brand) => DropdownMenuItem(
-                        value: brand,
-                        child: Text(brand),
-                      ))
+              value: _selectedSubcategoryId,
+              decoration: const InputDecoration(labelText: 'Subcategory'),
+              items: _subcategories
+                  .map((s) => DropdownMenuItem(value: s.id, child: Text(s.nameEn)))
                   .toList(),
-              onChanged: (value) {
-                setState(() => _selectedBrand = value);
-              },
+              onChanged: (value) => setState(() => _selectedSubcategoryId = value),
             ),
+            const SizedBox(height: 16),
+            if (useBrandDropdown)
+              DropdownButtonFormField<String>(
+                value: _selectedBrand,
+                decoration: const InputDecoration(labelText: 'Brand'),
+                items: availableBrands
+                    .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                    .toList(),
+                onChanged: (value) => setState(() => _selectedBrand = value),
+              )
+            else
+              TextFormField(
+                controller: _brandTextController,
+                decoration: const InputDecoration(labelText: 'Brand (optional)'),
+              ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _titleController,

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/category_model.dart';
 
 class AdminSettingsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -42,7 +43,41 @@ class AdminSettingsService {
     return (settings['sellerCommissionMin'] as num?)?.toDouble() ?? 0.0;
   }
 
-  // Whitelist
+  // Categories (new structure) — source of truth; fallback to defaults
+  Future<List<CategoryGroup>> getTopLevelCategories() async {
+    try {
+      final settings = await _fetchSettings();
+      final list = settings['categories'] as List<dynamic>?;
+      if (list != null && list.isNotEmpty) {
+        return list
+            .map((e) => CategoryGroup.fromMap(e as Map<String, dynamic>))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+      }
+    } catch (_) {}
+    return List.from(defaultTopLevelCategories)..sort((a, b) => a.order.compareTo(b.order));
+  }
+
+  Future<List<Subcategory>> getSubcategories(String parentId) async {
+    try {
+      final settings = await _fetchSettings();
+      final list = settings['subcategories'] as List<dynamic>?;
+      if (list != null && list.isNotEmpty) {
+        final all = list
+            .map((e) => Subcategory.fromMap(e as Map<String, dynamic>))
+            .where((s) => s.parentId == parentId)
+            .toList();
+        all.sort((a, b) => a.order.compareTo(b.order));
+        return all;
+      }
+    } catch (_) {}
+    return defaultSubcategories
+        .where((s) => s.parentId == parentId)
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+  }
+
+  // Whitelist (legacy — keep for backward compatibility)
   Future<List<String>> getWhitelistBags() async {
     final settings = await _fetchSettings();
     final whitelist = settings['whitelist'] as Map<String, dynamic>?;

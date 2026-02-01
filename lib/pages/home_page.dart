@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../theme/app_theme.dart';
 import '../services/auction_service.dart';
+import '../services/admin_settings_service.dart';
+import '../models/category_model.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -14,9 +16,21 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _searchController = TextEditingController();
   final _auctionService = AuctionService();
+  final _adminSettings = AdminSettingsService();
+  List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
 
-  /// Category tiles for the grid (exclude 'All')
-  static const List<String> _categoryTiles = ['Bags', 'Watches', 'Jewelry', 'Art'];
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final list = await _adminSettings.getTopLevelCategories();
+      if (mounted) setState(() => _categoryGroups = list);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -129,15 +143,16 @@ class _HomePageState extends State<HomePage> {
                       mainAxisSpacing: spacing,
                       crossAxisSpacing: spacing,
                       childAspectRatio: aspectRatio,
-                      children: _categoryTiles.map((category) {
+                      children: _categoryGroups.map((group) {
                         return _CategoryTile(
-                          category: category,
+                          categoryGroup: group,
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute<void>(
                                 builder: (context) => _CategoryListingPage(
-                                  category: category,
+                                  categoryGroupId: group.id,
+                                  categoryGroupName: group.nameEn,
                                   auctionService: _auctionService,
                                 ),
                               ),
@@ -306,7 +321,7 @@ class _HomePageState extends State<HomePage> {
                       final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
                       final endsAt = data['endsAt'] as Timestamp?;
                       final state = data['state'] as String? ?? 'UNKNOWN';
-                      final category = data['category'] as String? ?? '';
+                      final category = effectiveSubcategory(data);
                       // Get primary image URL from images array
                       final images = data['images'] as List<dynamic>?;
                       String? imageUrl;
@@ -355,24 +370,28 @@ class _HomePageState extends State<HomePage> {
 
 /// Premium category tile for the home grid (square/rectangular, tappable).
 class _CategoryTile extends StatelessWidget {
-  final String category;
+  final CategoryGroup categoryGroup;
   final VoidCallback onTap;
 
   const _CategoryTile({
-    required this.category,
+    required this.categoryGroup,
     required this.onTap,
   });
 
   IconData get _iconForCategory {
-    switch (category) {
-      case 'Bags':
+    switch (categoryGroup.id) {
+      case 'bags':
         return Icons.shopping_bag_outlined;
-      case 'Watches':
+      case 'watches':
         return Icons.watch_outlined;
-      case 'Jewelry':
+      case 'fashion':
+        return Icons.checkroom_outlined;
+      case 'jewelry':
         return Icons.diamond_outlined;
-      case 'Art':
-        return Icons.palette_outlined;
+      case 'accessories':
+        return Icons.style_outlined;
+      case 'collectibles':
+        return Icons.collections_outlined;
       default:
         return Icons.category_outlined;
     }
@@ -405,7 +424,7 @@ class _CategoryTile extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
-                    category,
+                    categoryGroup.nameEn,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: AppTheme.textPrimary,
@@ -678,13 +697,15 @@ class _ImagePlaceholder extends StatelessWidget {
   }
 }
 
-/// Full-screen listing for a single category (navigated from Home category grid).
+/// Full-screen listing for a category group with optional subcategory filter.
 class _CategoryListingPage extends StatefulWidget {
-  final String category;
+  final String categoryGroupId;
+  final String categoryGroupName;
   final AuctionService auctionService;
 
   const _CategoryListingPage({
-    required this.category,
+    required this.categoryGroupId,
+    required this.categoryGroupName,
     required this.auctionService,
   });
 
@@ -693,6 +714,23 @@ class _CategoryListingPage extends StatefulWidget {
 }
 
 class _CategoryListingPageState extends State<_CategoryListingPage> {
+  final _adminSettings = AdminSettingsService();
+  List<Subcategory> _subcategories = [];
+  String? _selectedSubcategoryId; // null = All
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSubcategories();
+  }
+
+  Future<void> _loadSubcategories() async {
+    try {
+      final list = await _adminSettings.getSubcategories(widget.categoryGroupId);
+      if (mounted) setState(() => _subcategories = list);
+    } catch (_) {}
+  }
+
   String _formatTimeLeft(Timestamp? endsAt) {
     if (endsAt == null) return 'No end date';
     final now = DateTime.now();
@@ -712,142 +750,199 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.category} Auctions'),
+        title: Text('${widget.categoryGroupName} Auctions'),
         backgroundColor: AppTheme.primaryBlue,
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
-        child: StreamBuilder<QuerySnapshot>(
-          stream: widget.auctionService.streamAllAuctions(limit: 50),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline, size: 48, color: AppTheme.error),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Error loading auctions',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppTheme.error,
-                          ),
-                    ),
-                  ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_subcategories.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _SubcategoryChip(
+                        label: 'All',
+                        isSelected: _selectedSubcategoryId == null,
+                        onTap: () => setState(() => _selectedSubcategoryId = null),
+                      ),
+                      const SizedBox(width: 8),
+                      ..._subcategories.map((s) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: _SubcategoryChip(
+                              label: s.nameEn,
+                              isSelected: _selectedSubcategoryId == s.id,
+                              onTap: () => setState(() => _selectedSubcategoryId = s.id),
+                            ),
+                          )),
+                    ],
+                  ),
                 ),
-              );
-            }
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return ListView.builder(
-                itemCount: 3,
-                itemBuilder: (_, __) => _SkeletonCard(),
-              );
-            }
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.inbox_outlined,
-                      size: 64,
-                      color: AppTheme.textTertiary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No active auctions in ${widget.category}',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppTheme.textSecondary,
+              ),
+            ],
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: widget.auctionService.streamAllAuctions(limit: 50),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline, size: 48, color: AppTheme.error),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Error loading auctions',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: AppTheme.error,
+                                ),
                           ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            }
-            final category = widget.category;
-            final filteredDocs = snapshot.data!.docs.where((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              final state = data['state'] as String? ?? 'UNKNOWN';
-              if (state != 'ACTIVE') return false;
-              final docCategory = data['category'] as String? ?? '';
-              if (docCategory != category) return false;
-              return true;
-            }).toList();
-            filteredDocs.sort((a, b) {
-              final aData = a.data() as Map<String, dynamic>;
-              final bData = b.data() as Map<String, dynamic>;
-              final aEndsAt = aData['endsAt'] as Timestamp?;
-              final bEndsAt = bData['endsAt'] as Timestamp?;
-              if (aEndsAt == null && bEndsAt == null) return 0;
-              if (aEndsAt == null) return 1;
-              if (bEndsAt == null) return -1;
-              return aEndsAt.compareTo(bEndsAt);
-            });
-            if (filteredDocs.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.inbox_outlined,
-                      size: 64,
-                      color: AppTheme.textTertiary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No active auctions in $category',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            }
-            return ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              itemCount: filteredDocs.length,
-              itemBuilder: (context, index) {
-                final doc = filteredDocs[index];
-                final data = doc.data() as Map<String, dynamic>;
-                final auctionId = doc.id;
-                final title = data['title'] as String? ?? 'Untitled Auction';
-                final currentPrice =
-                    (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
-                final endsAt = data['endsAt'] as Timestamp?;
-                final state = data['state'] as String? ?? 'UNKNOWN';
-                final docCategory = data['category'] as String? ?? '';
-                final images = data['images'] as List<dynamic>?;
-                String? imageUrl;
-                if (images != null && images.isNotEmpty) {
-                  final primaryImage = images.firstWhere(
-                    (img) => img is Map && (img['isPrimary'] == true),
-                    orElse: () => images.first,
-                  );
-                  if (primaryImage is Map) {
-                    imageUrl = primaryImage['url'] as String?;
-                  } else if (primaryImage is String) {
-                    imageUrl = primaryImage;
+                        ],
+                      ),
+                    );
                   }
-                }
-                final isEnded = _isEndedState(state);
-                final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);
-                return _AuctionCard(
-                  auctionId: auctionId,
-                  title: title,
-                  currentPrice: currentPrice,
-                  timeLeft: timeLeft,
-                  category: docCategory,
-                  imageUrl: imageUrl,
-                  isEnded: isEnded,
-                );
-              },
-            );
-          },
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return ListView.builder(
+                      itemCount: 3,
+                      itemBuilder: (_, __) => _SkeletonCard(),
+                    );
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.inbox_outlined, size: 64, color: AppTheme.textTertiary),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No active auctions in ${widget.categoryGroupName}',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  final groupId = widget.categoryGroupId;
+                  final subId = _selectedSubcategoryId;
+                  final filteredDocs = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final state = data['state'] as String? ?? 'UNKNOWN';
+                    if (state != 'ACTIVE') return false;
+                    if (effectiveCategoryGroup(data) != groupId) return false;
+                    if (subId != null && effectiveSubcategory(data) != subId) return false;
+                    return true;
+                  }).toList();
+                  filteredDocs.sort((a, b) {
+                    final aData = a.data() as Map<String, dynamic>;
+                    final bData = b.data() as Map<String, dynamic>;
+                    final aEndsAt = aData['endsAt'] as Timestamp?;
+                    final bEndsAt = bData['endsAt'] as Timestamp?;
+                    if (aEndsAt == null && bEndsAt == null) return 0;
+                    if (aEndsAt == null) return 1;
+                    if (bEndsAt == null) return -1;
+                    return aEndsAt.compareTo(bEndsAt);
+                  });
+                  if (filteredDocs.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.inbox_outlined, size: 64, color: AppTheme.textTertiary),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No active auctions in ${widget.categoryGroupName}',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    itemCount: filteredDocs.length,
+                    itemBuilder: (context, index) {
+                      final doc = filteredDocs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final auctionId = doc.id;
+                      final title = data['title'] as String? ?? 'Untitled Auction';
+                      final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
+                      final endsAt = data['endsAt'] as Timestamp?;
+                      final state = data['state'] as String? ?? 'UNKNOWN';
+                      final displayCategory = effectiveSubcategory(data);
+                      final images = data['images'] as List<dynamic>?;
+                      String? imageUrl;
+                      if (images != null && images.isNotEmpty) {
+                        final primaryImage = images.firstWhere(
+                          (img) => img is Map && (img['isPrimary'] == true),
+                          orElse: () => images.first,
+                        );
+                        if (primaryImage is Map) {
+                          imageUrl = primaryImage['url'] as String?;
+                        } else if (primaryImage is String) {
+                          imageUrl = primaryImage;
+                        }
+                      }
+                      final isEnded = _isEndedState(state);
+                      final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);
+                      return _AuctionCard(
+                        auctionId: auctionId,
+                        title: title,
+                        currentPrice: currentPrice,
+                        timeLeft: timeLeft,
+                        category: displayCategory,
+                        imageUrl: imageUrl,
+                        isEnded: isEnded,
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _SubcategoryChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SubcategoryChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => onTap(),
+      selectedColor: Theme.of(context).colorScheme.primaryContainer,
+      checkmarkColor: AppTheme.primaryBlue,
+      labelStyle: TextStyle(
+        color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+      ),
+      side: BorderSide(
+        color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
+        width: 1,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     );
   }
 }

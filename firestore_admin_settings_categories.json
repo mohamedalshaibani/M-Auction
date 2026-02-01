@@ -1,0 +1,24 @@
+{
+  "description": "Merge this into Firestore collection 'adminSettings' document 'main'. Add/update 'categories' and 'subcategories' arrays. Keep existing fields (whitelist, durationOptions, etc.) unchanged.",
+  "categories": [
+    { "id": "watches", "nameAr": "ساعات", "nameEn": "Watches", "order": 1 },
+    { "id": "bags", "nameAr": "شنط", "nameEn": "Bags", "order": 2 },
+    { "id": "fashion", "nameAr": "فاشن", "nameEn": "Fashion", "order": 3 },
+    { "id": "jewelry", "nameAr": "مجوهرات", "nameEn": "Jewelry", "order": 4 },
+    { "id": "accessories", "nameAr": "اكسسوارات", "nameEn": "Accessories", "order": 5 },
+    { "id": "collectibles", "nameAr": "مقتنيات", "nameEn": "Collectibles", "order": 6 }
+  ],
+  "subcategories": [
+    { "id": "watches", "parentId": "watches", "nameAr": "ساعات", "nameEn": "Watches", "order": 1 },
+    { "id": "bags", "parentId": "bags", "nameAr": "شنط", "nameEn": "Bags", "order": 1 },
+    { "id": "clothing", "parentId": "fashion", "nameAr": "ملابس", "nameEn": "Clothing", "order": 1 },
+    { "id": "shoes", "parentId": "fashion", "nameAr": "أحذية", "nameEn": "Shoes", "order": 2 },
+    { "id": "caps", "parentId": "fashion", "nameAr": "قبعات", "nameEn": "Caps", "order": 3 },
+    { "id": "jewelry", "parentId": "jewelry", "nameAr": "مجوهرات", "nameEn": "Jewelry", "order": 1 },
+    { "id": "wallets", "parentId": "accessories", "nameAr": "محافظ", "nameEn": "Wallets", "order": 1 },
+    { "id": "eyewear", "parentId": "accessories", "nameAr": "نظارات", "nameEn": "Eyewear", "order": 2 },
+    { "id": "pens", "parentId": "accessories", "nameAr": "أقلام", "nameEn": "Pens", "order": 3 },
+    { "id": "travel_bags", "parentId": "collectibles", "nameAr": "حقائب سفر", "nameEn": "Travel Bags", "order": 1 },
+    { "id": "collectibles", "parentId": "collectibles", "nameAr": "مقتنيات", "nameEn": "Collectibles", "order": 2 }
+  ]
+}

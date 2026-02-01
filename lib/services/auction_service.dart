@@ -12,10 +12,11 @@ class AuctionService {
   final ContractService _contractService = ContractService();
   final PaymentService _paymentService = PaymentService();
 
-  // Create draft auction
+  // Create draft auction (categoryGroup + subcategory are source of truth; category kept for legacy)
   Future<String> createDraftAuction({
     required String sellerId,
-    required String category,
+    required String categoryGroup,
+    required String subcategory,
     required String brand,
     required String title,
     required String description,
@@ -33,7 +34,9 @@ class AuctionService {
     await auctionRef.set({
       'sellerId': sellerId,
       'ownerUid': sellerId, // Set ownerUid for image security
-      'category': category,
+      'categoryGroup': categoryGroup,
+      'subcategory': subcategory,
+      'category': subcategory, // legacy field for backward compatibility
       'brand': brand,
       'title': title,
       'description': description,

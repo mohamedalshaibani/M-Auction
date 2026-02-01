@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../services/auction_service.dart';
+import '../services/admin_settings_service.dart';
+import '../models/category_model.dart';
 import '../theme/app_theme.dart';
 
 class ExplorePage extends StatefulWidget {
@@ -14,10 +16,42 @@ class ExplorePage extends StatefulWidget {
 class _ExplorePageState extends State<ExplorePage> {
   final _searchController = TextEditingController();
   final _auctionService = AuctionService();
-  String _selectedCategory = 'All';
+  final _adminSettings = AdminSettingsService();
+  List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
+  String? _selectedCategoryGroupId; // null = All
+  String? _selectedSubcategoryId;
+  List<Subcategory> _subcategories = [];
   String _selectedFilter = 'Active';
-  
-  final List<String> _categories = ['All', 'Bags', 'Watches', 'Jewelry', 'Art'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final list = await _adminSettings.getTopLevelCategories();
+      if (mounted) setState(() => _categoryGroups = list);
+    } catch (_) {}
+  }
+
+  Future<void> _onCategoryGroupTapped(String? groupId) async {
+    if (groupId == null) {
+      if (mounted) setState(() {
+        _selectedCategoryGroupId = null;
+        _selectedSubcategoryId = null;
+        _subcategories = [];
+      });
+      return;
+    }
+    final subs = await _adminSettings.getSubcategories(groupId);
+    if (mounted) setState(() {
+      _selectedCategoryGroupId = groupId;
+      _subcategories = subs;
+      _selectedSubcategoryId = null;
+    });
+  }
 
   @override
   void dispose() {
@@ -141,45 +175,80 @@ class _ExplorePageState extends State<ExplorePage> {
               child: SizedBox(height: 16),
             ),
             
-            // Category chips
+            // Category grid (6 top-level categories in order)
             SliverToBoxAdapter(
-              child: SizedBox(
-                height: 40,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  children: _categories.map((category) {
-                    final isSelected = category == _selectedCategory;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(category),
-                        selected: isSelected,
-                        onSelected: (_) {
-                          setState(() {
-                            _selectedCategory = category;
-                          });
-                        },
-                        selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                        checkmarkColor: AppTheme.primaryBlue,
-                        labelStyle: TextStyle(
-                          color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    const crossAxisCount = 2;
+                    const spacing = 12.0;
+                    const aspectRatio = 1.0;
+                    return GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: crossAxisCount,
+                      mainAxisSpacing: spacing,
+                      crossAxisSpacing: spacing,
+                      childAspectRatio: aspectRatio,
+                      children: [
+                        _ExploreCategoryTile(
+                          label: 'All',
+                          isSelected: _selectedCategoryGroupId == null,
+                          onTap: () => _onCategoryGroupTapped(null),
                         ),
-                        side: BorderSide(
-                          color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
-                          width: 1,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
+                        ..._categoryGroups.map((g) => _ExploreCategoryTile(
+                              label: g.nameEn,
+                              isSelected: _selectedCategoryGroupId == g.id,
+                              onTap: () => _onCategoryGroupTapped(g.id),
+                            )),
+                      ],
                     );
-                  }).toList(),
+                  },
                 ),
               ),
             ),
-            
+            if (_selectedCategoryGroupId != null && _subcategories.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        FilterChip(
+                          label: const Text('All'),
+                          selected: _selectedSubcategoryId == null,
+                          onSelected: (_) => setState(() => _selectedSubcategoryId = null),
+                          selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                          checkmarkColor: AppTheme.primaryBlue,
+                          side: BorderSide(
+                            color: _selectedSubcategoryId == null ? AppTheme.primaryBlue : AppTheme.border,
+                            width: 1,
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        const SizedBox(width: 8),
+                        ..._subcategories.map((s) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FilterChip(
+                                label: Text(s.nameEn),
+                                selected: _selectedSubcategoryId == s.id,
+                                onSelected: (_) => setState(() => _selectedSubcategoryId = s.id),
+                                selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                                checkmarkColor: AppTheme.primaryBlue,
+                                side: BorderSide(
+                                  color: _selectedSubcategoryId == s.id ? AppTheme.primaryBlue : AppTheme.border,
+                                  width: 1,
+                                ),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            )),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             const SliverToBoxAdapter(
               child: SizedBox(height: 20),
             ),
@@ -189,7 +258,7 @@ class _ExplorePageState extends State<ExplorePage> {
               stream: _auctionService.streamAllAuctions(limit: 50),
               builder: (context, snapshot) {
                 if (kDebugMode) {
-                  debugPrint('ExplorePage: filter=$_selectedFilter, category=$_selectedCategory');
+                  debugPrint('ExplorePage: filter=$_selectedFilter, categoryGroup=$_selectedCategoryGroupId');
                 }
 
                 if (snapshot.hasError) {
@@ -295,10 +364,11 @@ class _ExplorePageState extends State<ExplorePage> {
                     if (!_isEndedState(state)) return false;
                   }
                   
-                  // Category filter
-                  if (_selectedCategory != 'All') {
-                    final category = data['category'] as String? ?? '';
-                    if (category != _selectedCategory) return false;
+                  // Category filter (categoryGroup + optional subcategory)
+                  if (_selectedCategoryGroupId != null) {
+                    if (effectiveCategoryGroup(data) != _selectedCategoryGroupId) return false;
+                    if (_selectedSubcategoryId != null &&
+                        effectiveSubcategory(data) != _selectedSubcategoryId) return false;
                   }
                   
                   // Search filter
@@ -374,7 +444,7 @@ class _ExplorePageState extends State<ExplorePage> {
                         final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
                         final endsAt = data['endsAt'] as Timestamp?;
                         final state = data['state'] as String? ?? 'UNKNOWN';
-                        final category = data['category'] as String? ?? '';
+                        final category = effectiveSubcategory(data);
                         // Get primary image URL from images array
                         final images = data['images'] as List<dynamic>?;
                         String? imageUrl;

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
+import '../models/category_model.dart';
 import '../widgets/auction_image_uploader.dart';
 import '../theme/app_theme.dart';
 
@@ -20,8 +21,12 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   final _conditionController = TextEditingController();
   final _itemIdentifierController = TextEditingController();
   final _startPriceController = TextEditingController();
+  final _brandTextController = TextEditingController();
 
-  String _selectedCategory = 'bags';
+  List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
+  List<Subcategory> _subcategories = defaultSubcategories.where((s) => s.parentId == 'bags').toList();
+  String _selectedCategoryGroupId = 'bags';
+  String? _selectedSubcategoryId;
   String? _selectedBrand;
   int? _selectedDurationDays;
   String? _auctionId; // Store auctionId for image upload
@@ -46,20 +51,42 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       final bagBrands = await _adminSettings.getWhitelistBags();
       final watchBrands = await _adminSettings.getWhitelistWatches();
       final durations = await _adminSettings.getDurationOptions();
-
-      setState(() {
-        _bagBrands = bagBrands;
-        _watchBrands = watchBrands;
-        _durationOptions = durations;
-        _selectedBrand = _bagBrands.isNotEmpty ? _bagBrands.first : null;
-        _selectedDurationDays =
-            _durationOptions.isNotEmpty ? _durationOptions.first : null;
-      });
+      final groups = await _adminSettings.getTopLevelCategories();
+      final subs = await _adminSettings.getSubcategories('bags');
+      if (mounted) {
+        setState(() {
+          _bagBrands = bagBrands;
+          _watchBrands = watchBrands;
+          _durationOptions = durations;
+          _categoryGroups = groups;
+          _subcategories = subs;
+          _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
+          _selectedBrand = _bagBrands.isNotEmpty ? _bagBrands.first : null;
+          _selectedDurationDays = _durationOptions.isNotEmpty ? _durationOptions.first : null;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = 'Error loading settings: $e';
-      });
+      if (mounted) setState(() => _error = 'Error loading settings: $e');
     }
+  }
+
+  Future<void> _onCategoryGroupChanged(String groupId) async {
+    final subs = await _adminSettings.getSubcategories(groupId);
+    if (!mounted) return;
+    setState(() {
+      _selectedCategoryGroupId = groupId;
+      _subcategories = subs;
+      _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
+      if (groupId == 'bags') {
+        _selectedBrand = _bagBrands.isNotEmpty ? _bagBrands.first : null;
+        _brandTextController.clear();
+      } else if (groupId == 'watches') {
+        _selectedBrand = _watchBrands.isNotEmpty ? _watchBrands.first : null;
+        _brandTextController.clear();
+      } else {
+        _selectedBrand = null;
+      }
+    });
   }
 
   @override
@@ -69,6 +96,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
     _conditionController.dispose();
     _itemIdentifierController.dispose();
     _startPriceController.dispose();
+    _brandTextController.dispose();
     super.dispose();
   }
 
@@ -144,8 +172,15 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       return;
     }
 
-    if (_selectedBrand == null || _selectedDurationDays == null) {
-      setState(() => _error = 'Please select brand and duration');
+    if (_selectedSubcategoryId == null || _selectedDurationDays == null) {
+      setState(() => _error = 'Please select category and duration');
+      return;
+    }
+    final brand = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches'
+        ? (_selectedBrand ?? '')
+        : _brandTextController.text.trim();
+    if (brand.isEmpty) {
+      setState(() => _error = 'Please select or enter brand');
       return;
     }
 
@@ -160,8 +195,9 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       // Create draft auction first (needed for image upload)
       final auctionId = await _auctionService.createDraftAuction(
         sellerId: user.uid,
-        category: _selectedCategory,
-        brand: _selectedBrand!,
+        categoryGroup: _selectedCategoryGroupId,
+        subcategory: _selectedSubcategoryId!,
+        brand: brand,
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         condition: _conditionController.text.trim(),
@@ -207,8 +243,8 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
 
   @override
   Widget build(BuildContext context) {
-    final availableBrands =
-        _selectedCategory == 'bags' ? _bagBrands : _watchBrands;
+    final useBrandDropdown = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches';
+    final availableBrands = _selectedCategoryGroupId == 'bags' ? _bagBrands : _watchBrands;
 
     return Scaffold(
       appBar: AppBar(
@@ -220,35 +256,47 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
           padding: const EdgeInsets.all(16),
           children: [
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              value: _selectedCategoryGroupId,
               decoration: const InputDecoration(labelText: 'Category'),
-              items: const [
-                DropdownMenuItem(value: 'bags', child: Text('Bags')),
-                DropdownMenuItem(value: 'watches', child: Text('Watches')),
-              ],
+              items: _categoryGroups
+                  .map((g) => DropdownMenuItem(
+                        value: g.id,
+                        child: Text(g.nameEn),
+                      ))
+                  .toList(),
               onChanged: (value) {
-                setState(() {
-                  _selectedCategory = value ?? 'bags';
-                  _selectedBrand = availableBrands.isNotEmpty
-                      ? availableBrands.first
-                      : null;
-                });
+                if (value != null) _onCategoryGroupChanged(value);
               },
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedBrand,
-              decoration: const InputDecoration(labelText: 'Brand'),
-              items: availableBrands
-                  .map((brand) => DropdownMenuItem(
-                        value: brand,
-                        child: Text(brand),
+              value: _selectedSubcategoryId,
+              decoration: const InputDecoration(labelText: 'Subcategory'),
+              items: _subcategories
+                  .map((s) => DropdownMenuItem(
+                        value: s.id,
+                        child: Text(s.nameEn),
                       ))
                   .toList(),
               onChanged: (value) {
-                setState(() => _selectedBrand = value);
+                setState(() => _selectedSubcategoryId = value);
               },
             ),
+            const SizedBox(height: 16),
+            if (useBrandDropdown)
+              DropdownButtonFormField<String>(
+                value: _selectedBrand,
+                decoration: const InputDecoration(labelText: 'Brand'),
+                items: availableBrands
+                    .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                    .toList(),
+                onChanged: (value) => setState(() => _selectedBrand = value),
+              )
+            else
+              TextFormField(
+                controller: _brandTextController,
+                decoration: const InputDecoration(labelText: 'Brand (optional)'),
+              ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _titleController,
