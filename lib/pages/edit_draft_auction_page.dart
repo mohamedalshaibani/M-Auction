@@ -171,10 +171,16 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
+      
       setState(() {
         _error = 'Error updating auction: $e';
-        _isLoading = false;
       });
+    } finally {
+      // Always reset loading state
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -235,11 +241,10 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
-        _isSubmitting = false;
       });
     } finally {
-      // Always reset state, even if widget unmounted or error shown
-      if (mounted && _isSubmitting) {
+      // Always reset submitting state, regardless of success or error
+      if (mounted) {
         setState(() => _isSubmitting = false);
       }
     }
