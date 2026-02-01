@@ -14,11 +14,9 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _searchController = TextEditingController();
   final _auctionService = AuctionService();
-  String _selectedCategory = 'All';
-  String _selectedFilter = 'Active'; // 'Active' or 'Ended'
-  
-  // Available categories
-  final List<String> _categories = ['All', 'Bags', 'Watches', 'Jewelry', 'Art'];
+
+  /// Category tiles for the grid (exclude 'All')
+  static const List<String> _categoryTiles = ['Bags', 'Watches', 'Jewelry', 'Art'];
 
   @override
   void dispose() {
@@ -63,8 +61,8 @@ class _HomePageState extends State<HomePage> {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 48,
-                      height: 28,
+                      width: 80,
+                      height: 44,
                       child: Image.asset(
                         'assets/branding/logo_light.png',
                         fit: BoxFit.contain,
@@ -113,84 +111,42 @@ class _HomePageState extends State<HomePage> {
               child: SizedBox(height: 20),
             ),
             
-            // Active/Ended filter toggle
+            // Category grid (square/rectangular tiles)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.backgroundGrey,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _FilterToggle(
-                          label: 'Active',
-                          isSelected: _selectedFilter == 'Active',
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    const crossAxisCount = 2;
+                    const spacing = 12.0;
+                    final width = (constraints.maxWidth - spacing) / crossAxisCount;
+                    const aspectRatio = 1.0; // square tiles
+                    final tileHeight = width / aspectRatio;
+                    return GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: crossAxisCount,
+                      mainAxisSpacing: spacing,
+                      crossAxisSpacing: spacing,
+                      childAspectRatio: aspectRatio,
+                      children: _categoryTiles.map((category) {
+                        return _CategoryTile(
+                          category: category,
                           onTap: () {
-                            setState(() {
-                              _selectedFilter = 'Active';
-                            });
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (context) => _CategoryListingPage(
+                                  category: category,
+                                  auctionService: _auctionService,
+                                ),
+                              ),
+                            );
                           },
-                        ),
-                      ),
-                      Expanded(
-                        child: _FilterToggle(
-                          label: 'Ended',
-                          isSelected: _selectedFilter == 'Ended',
-                          onTap: () {
-                            setState(() {
-                              _selectedFilter = 'Ended';
-                            });
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 16),
-            ),
-            
-            // Category chips
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 40,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  children: _categories.map((category) {
-                    final isSelected = category == _selectedCategory;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(category),
-                        selected: isSelected,
-                        onSelected: (_) {
-                          setState(() {
-                            _selectedCategory = category;
-                          });
-                        },
-                        selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                        checkmarkColor: AppTheme.primaryBlue,
-                        labelStyle: TextStyle(
-                          color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                        ),
-                        side: BorderSide(
-                          color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
-                          width: 1,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
+                        );
+                      }).toList(),
                     );
-                  }).toList(),
+                  },
                 ),
               ),
             ),
@@ -199,12 +155,12 @@ class _HomePageState extends State<HomePage> {
               child: SizedBox(height: 20),
             ),
             
-            // Auction cards list from Firestore
+            // Auction cards list from Firestore (all active, no category filter)
             StreamBuilder<QuerySnapshot>(
               stream: _auctionService.streamAllAuctions(limit: 50),
               builder: (context, snapshot) {
                 if (kDebugMode) {
-                  debugPrint('HomePage: filter=$_selectedFilter, category=$_selectedCategory');
+                  debugPrint('HomePage: loading auctions');
                 }
 
                 if (snapshot.hasError) {
@@ -274,9 +230,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              _selectedFilter == 'Active'
-                                  ? 'No active auctions yet'
-                                  : 'No ended auctions yet',
+                              'No active auctions yet',
                               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                     color: AppTheme.textSecondary,
                                   ),
@@ -288,58 +242,29 @@ class _HomePageState extends State<HomePage> {
                   );
                 }
 
-                // Apply ALL filtering and sorting locally
+                // Apply filtering: active only, optional search
                 final searchQuery = _searchController.text.trim().toLowerCase();
                 var filteredDocs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   final state = data['state'] as String? ?? 'UNKNOWN';
-                  
-                  // State filter (Active or Ended)
-                  if (_selectedFilter == 'Active') {
-                    if (state != 'ACTIVE') return false;
-                  } else {
-                    // Ended filter
-                    if (!_isEndedState(state)) return false;
-                  }
-                  
-                  // Category filter (in memory)
-                  if (_selectedCategory != 'All') {
-                    final category = data['category'] as String? ?? '';
-                    if (category != _selectedCategory) {
-                      return false;
-                    }
-                  }
-                  
-                  // Search filter (in memory)
+                  if (state != 'ACTIVE') return false;
                   if (searchQuery.isNotEmpty) {
                     final title = (data['title'] as String? ?? '').toLowerCase();
-                    if (!title.contains(searchQuery)) {
-                      return false;
-                    }
+                    if (!title.contains(searchQuery)) return false;
                   }
-                  
                   return true;
                 }).toList();
 
-                // Sort by endsAt in memory
+                // Sort by endsAt ascending (ending soonest first)
                 filteredDocs.sort((a, b) {
                   final aData = a.data() as Map<String, dynamic>;
                   final bData = b.data() as Map<String, dynamic>;
                   final aEndsAt = aData['endsAt'] as Timestamp?;
                   final bEndsAt = bData['endsAt'] as Timestamp?;
-
-                  // Null endsAt goes last
                   if (aEndsAt == null && bEndsAt == null) return 0;
                   if (aEndsAt == null) return 1;
                   if (bEndsAt == null) return -1;
-
-                  if (_selectedFilter == 'Active') {
-                    // Active: ascending (ending soonest first)
-                    return aEndsAt.compareTo(bEndsAt);
-                  } else {
-                    // Ended: descending (most recently ended first)
-                    return bEndsAt.compareTo(aEndsAt);
-                  }
+                  return aEndsAt.compareTo(bEndsAt);
                 });
 
                 if (filteredDocs.isEmpty) {
@@ -428,35 +353,71 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _FilterToggle extends StatelessWidget {
-  final String label;
-  final bool isSelected;
+/// Premium category tile for the home grid (square/rectangular, tappable).
+class _CategoryTile extends StatelessWidget {
+  final String category;
   final VoidCallback onTap;
 
-  const _FilterToggle({
-    required this.label,
-    required this.isSelected,
+  const _CategoryTile({
+    required this.category,
     required this.onTap,
   });
 
+  IconData get _iconForCategory {
+    switch (category) {
+      case 'Bags':
+        return Icons.shopping_bag_outlined;
+      case 'Watches':
+        return Icons.watch_outlined;
+      case 'Jewelry':
+        return Icons.diamond_outlined;
+      case 'Art':
+        return Icons.palette_outlined;
+      default:
+        return Icons.category_outlined;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
+    return Material(
+      color: AppTheme.surface,
       borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: isSelected ? Colors.white : AppTheme.textSecondary,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.border, width: 1),
+            color: AppTheme.surface,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _iconForCategory,
+                  size: 36,
+                  color: AppTheme.primaryBlue,
                 ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    category,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: 0.25,
+                        ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -711,6 +672,180 @@ class _ImagePlaceholder extends StatelessWidget {
           Icons.image_outlined,
           size: 48,
           color: AppTheme.textTertiary,
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-screen listing for a single category (navigated from Home category grid).
+class _CategoryListingPage extends StatefulWidget {
+  final String category;
+  final AuctionService auctionService;
+
+  const _CategoryListingPage({
+    required this.category,
+    required this.auctionService,
+  });
+
+  @override
+  State<_CategoryListingPage> createState() => _CategoryListingPageState();
+}
+
+class _CategoryListingPageState extends State<_CategoryListingPage> {
+  String _formatTimeLeft(Timestamp? endsAt) {
+    if (endsAt == null) return 'No end date';
+    final now = DateTime.now();
+    final endDate = endsAt.toDate();
+    final difference = endDate.difference(now);
+    if (difference.isNegative) return 'Ended';
+    if (difference.inDays > 0) return '${difference.inDays}d ${difference.inHours % 24}h';
+    if (difference.inHours > 0) return '${difference.inHours}h ${difference.inMinutes % 60}m';
+    if (difference.inMinutes > 0) return '${difference.inMinutes}m';
+    return 'Ending soon';
+  }
+
+  bool _isEndedState(String state) =>
+      state == 'ENDED' || state == 'ENDED_NO_RESPONSE';
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${widget.category} Auctions'),
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+      ),
+      body: SafeArea(
+        child: StreamBuilder<QuerySnapshot>(
+          stream: widget.auctionService.streamAllAuctions(limit: 50),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: AppTheme.error),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading auctions',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppTheme.error,
+                          ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return ListView.builder(
+                itemCount: 3,
+                itemBuilder: (_, __) => _SkeletonCard(),
+              );
+            }
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.inbox_outlined,
+                      size: 64,
+                      color: AppTheme.textTertiary,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No active auctions in ${widget.category}',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            }
+            final category = widget.category;
+            final filteredDocs = snapshot.data!.docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final state = data['state'] as String? ?? 'UNKNOWN';
+              if (state != 'ACTIVE') return false;
+              final docCategory = data['category'] as String? ?? '';
+              if (docCategory != category) return false;
+              return true;
+            }).toList();
+            filteredDocs.sort((a, b) {
+              final aData = a.data() as Map<String, dynamic>;
+              final bData = b.data() as Map<String, dynamic>;
+              final aEndsAt = aData['endsAt'] as Timestamp?;
+              final bEndsAt = bData['endsAt'] as Timestamp?;
+              if (aEndsAt == null && bEndsAt == null) return 0;
+              if (aEndsAt == null) return 1;
+              if (bEndsAt == null) return -1;
+              return aEndsAt.compareTo(bEndsAt);
+            });
+            if (filteredDocs.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.inbox_outlined,
+                      size: 64,
+                      color: AppTheme.textTertiary,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No active auctions in $category',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              itemCount: filteredDocs.length,
+              itemBuilder: (context, index) {
+                final doc = filteredDocs[index];
+                final data = doc.data() as Map<String, dynamic>;
+                final auctionId = doc.id;
+                final title = data['title'] as String? ?? 'Untitled Auction';
+                final currentPrice =
+                    (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
+                final endsAt = data['endsAt'] as Timestamp?;
+                final state = data['state'] as String? ?? 'UNKNOWN';
+                final docCategory = data['category'] as String? ?? '';
+                final images = data['images'] as List<dynamic>?;
+                String? imageUrl;
+                if (images != null && images.isNotEmpty) {
+                  final primaryImage = images.firstWhere(
+                    (img) => img is Map && (img['isPrimary'] == true),
+                    orElse: () => images.first,
+                  );
+                  if (primaryImage is Map) {
+                    imageUrl = primaryImage['url'] as String?;
+                  } else if (primaryImage is String) {
+                    imageUrl = primaryImage;
+                  }
+                }
+                final isEnded = _isEndedState(state);
+                final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);
+                return _AuctionCard(
+                  auctionId: auctionId,
+                  title: title,
+                  currentPrice: currentPrice,
+                  timeLeft: timeLeft,
+                  category: docCategory,
+                  imageUrl: imageUrl,
+                  isEnded: isEnded,
+                );
+              },
+            );
+          },
         ),
       ),
     );
