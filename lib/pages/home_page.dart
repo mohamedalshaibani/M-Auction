@@ -66,7 +66,7 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(width: 16),
             Text(
               'M Auction',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
@@ -111,7 +111,7 @@ class _HomePageState extends State<HomePage> {
                                 Expanded(
                                   child: Text(
                                     'Search auctions...',
-                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                           color: Colors.grey.shade600,
                                         ),
                                     maxLines: 1,
@@ -185,11 +185,10 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    const crossAxisCount = 2;
-                    const spacing = 12.0;
-                    final width = (constraints.maxWidth - spacing) / crossAxisCount;
+                    const crossAxisCount = 3;
+                    const spacing = 10.0;
+                    final width = (constraints.maxWidth - (crossAxisCount - 1) * spacing) / crossAxisCount;
                     const aspectRatio = 1.0; // square tiles
-                    final tileHeight = width / aspectRatio;
                     return GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -279,18 +278,18 @@ class _CategoryTile extends StatelessWidget {
               children: [
                 Icon(
                   _iconForCategory,
-                  size: 36,
+                  size: 28,
                   color: AppTheme.primaryBlue,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Text(
                     categoryGroup.nameEn,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: AppTheme.textPrimary,
-                          letterSpacing: 0.25,
+                          letterSpacing: 0.2,
                         ),
                     textAlign: TextAlign.center,
                     maxLines: 1,
