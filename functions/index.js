@@ -1253,17 +1253,19 @@ exports.watermarkAuctionImage = functions
         } else {
           // Image exists - update URL and mark as processed
           // Use uploadTimestamp captured BEFORE transaction (not Timestamp.now() here)
+          // CRITICAL: Do NOT overwrite id or path - these fields are immutable once set
+          // Only update url, wmPath, and processedAt to preserve image identity
           
           images[imageIndex] = {
             ...images[imageIndex],
-            id: idToStore, // Ensure consistent ID
-            path: filePath,
+            // id: PRESERVED (never overwrite)
+            // path: PRESERVED (never overwrite)
             url: originUrl,
             wmPath: '',
             processedAt: uploadTimestamp,
           };
           
-          console.log('Updated image URL in trigger:', {auctionId, imageId: idToStore});
+          console.log('Updated image URL in trigger:', {auctionId, imageId: images[imageIndex].id});
         }
         
         // Single atomic update - NEVER modify ownerUid (set at auction creation only)
