@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 
-/// Contact Us: quick actions (WhatsApp, Call, Email) + optional form → supportTickets.
+/// Contact Us: email + contact form → supportTickets.
 class ContactUsPage extends StatefulWidget {
   const ContactUsPage({super.key});
 
@@ -15,34 +15,18 @@ class ContactUsPage extends StatefulWidget {
 class _ContactUsPageState extends State<ContactUsPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _messageController = TextEditingController();
   bool _isSubmitting = false;
 
-  static const String _whatsAppNumber = '971501234567';
-  static const String _phoneNumber = '+971501234567';
   static const String _email = 'support@mauction.example.com';
 
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
+    _emailController.dispose();
     _messageController.dispose();
     super.dispose();
-  }
-
-  Future<void> _openWhatsApp() async {
-    final uri = Uri.parse('https://wa.me/$_whatsAppNumber');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  Future<void> _openPhone() async {
-    final uri = Uri.parse('tel:$_phoneNumber');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 
   Future<void> _openEmail() async {
@@ -62,7 +46,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
       await FirebaseFirestore.instance.collection('supportTickets').add({
         'userId': user?.uid,
         'name': _nameController.text.trim(),
-        'phone': _phoneController.text.trim(),
+        'email': _emailController.text.trim(),
         'message': _messageController.text.trim(),
         'createdAt': FieldValue.serverTimestamp(),
         'status': 'new',
@@ -76,7 +60,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         ),
       );
       _nameController.clear();
-      _phoneController.clear();
+      _emailController.clear();
       _messageController.clear();
     } catch (e) {
       if (mounted) {
@@ -111,39 +95,54 @@ class _ContactUsPageState extends State<ContactUsPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Quick actions',
+              'Email us',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: AppTheme.textPrimary,
                   ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _QuickActionTile(
-                    icon: Icons.chat_bubble_outline,
-                    label: 'WhatsApp',
-                    onTap: _openWhatsApp,
+            Material(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                onTap: _openEmail,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.email_outlined, size: 28, color: AppTheme.primaryBlue),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Support',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                            ),
+                            Text(
+                              _email,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.open_in_new, size: 20, color: AppTheme.textTertiary),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _QuickActionTile(
-                    icon: Icons.phone_outlined,
-                    label: 'Call',
-                    onTap: _openPhone,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _QuickActionTile(
-                    icon: Icons.email_outlined,
-                    label: 'Email',
-                    onTap: _openEmail,
-                  ),
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 32),
             Text(
@@ -178,13 +177,13 @@ class _ContactUsPageState extends State<ContactUsPage> {
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
-                      controller: _phoneController,
+                      controller: _emailController,
                       decoration: const InputDecoration(
-                        labelText: 'Phone',
+                        labelText: 'Email',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      keyboardType: TextInputType.phone,
+                      keyboardType: TextInputType.emailAddress,
                       validator: (v) =>
                           (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
@@ -224,49 +223,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickActionTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _QuickActionTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppTheme.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.border),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, size: 28, color: AppTheme.primaryBlue),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
-              ),
-            ],
-          ),
         ),
       ),
     );

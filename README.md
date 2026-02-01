@@ -51,3 +51,21 @@ users/{uid}.role = "admin"
 ```
 
 Only users with `role == "admin"` can access the Admin Panel and perform admin actions.
+
+### Testing data: 30 ACTIVE auctions
+To seed 30 ACTIVE auctions in Firestore for testing and experiments:
+
+1. **Service account**: Create a Firebase service account key (Project settings → Service accounts → Generate new private key) and save it locally (e.g. `serviceAccountKey.json`). Do not commit this file.
+
+2. **Run the seed script** from the `functions` directory:
+   ```bash
+   cd functions
+   GOOGLE_APPLICATION_CREDENTIALS=../serviceAccountKey.json node scripts/seed_auctions.js
+   ```
+   Or from project root:
+   ```bash
+   GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json node functions/scripts/seed_auctions.js
+   ```
+   (Ensure `cd functions` first if you run from project root so `firebase-admin` is found, or run `npm run seed-auctions` from inside `functions` with `GOOGLE_APPLICATION_CREDENTIALS` set.)
+
+3. **Optional**: Set `SEED_SELLER_UID` to an existing user UID so seed auctions use that user as seller; otherwise the script uses the first user in the `users` collection or a placeholder.

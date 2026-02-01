@@ -5,6 +5,7 @@ import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
 import '../services/firestore_service.dart';
 import '../services/kyc_service.dart';
+import '../services/ads_service.dart';
 import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
 
@@ -28,7 +29,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   Future<bool> _checkAdmin() async {
@@ -174,6 +175,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                 Tab(text: 'Deposits'),
                 Tab(text: 'KYC Requests'),
                 Tab(text: 'Revenue'),
+                Tab(text: 'Ads'),
               ],
             ),
           ),
@@ -184,6 +186,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
               _buildDepositsTab(),
               _buildKycTab(),
               _buildRevenueTab(),
+              _buildAdsTab(),
             ],
           ),
         );
@@ -966,6 +969,388 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           },
         );
       },
+    );
+  }
+
+  Widget _buildAdsTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: streamAllAds(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading ads',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${snapshot.error}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final docs = snapshot.data!.docs;
+        return Column(
+          children: [
+            Expanded(
+              child: docs.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.campaign_outlined, size: 64, color: AppTheme.textTertiary),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No ads yet',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Add a partner banner below',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        final ad = PartnerAd.fromDoc(doc);
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: ad.imageUrl.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      ad.imageUrl,
+                                      width: 56,
+                                      height: 56,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Icon(Icons.campaign_outlined, color: AppTheme.textTertiary),
+                                    ),
+                                  )
+                                : Icon(Icons.campaign_outlined, color: AppTheme.textTertiary),
+                            title: Text(ad.partnerName),
+                            subtitle: Text('Partner ID: ${ad.partnerId} • Order: ${ad.order} • ${ad.active ? "Active" : "Inactive"}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: () => _showEditAdDialog(context, ad),
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.delete_outline, color: AppTheme.error),
+                                  onPressed: () async {
+                                    if (!context.mounted) return;
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Delete ad?'),
+                                        content: Text('Remove banner for ${ad.partnerName}?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.of(ctx).pop(false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+                                            onPressed: () => Navigator.of(ctx).pop(true),
+                                            child: const Text('Delete'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      try {
+                                        await deleteAd(ad.id);
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Ad deleted')),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Error: $e')),
+                                          );
+                                        }
+                                      }
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => _showAddAdDialog(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add ad'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showAddAdDialog(BuildContext context) {
+    final partnerIdController = TextEditingController();
+    final partnerNameController = TextEditingController();
+    final imageUrlController = TextEditingController();
+    final linkUrlController = TextEditingController();
+    final orderController = TextEditingController(text: '0');
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text('Add partner ad'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: partnerIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Partner ID (unique)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: partnerNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Partner name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: imageUrlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Banner image URL',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: linkUrlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Link URL (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: orderController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Order (higher = first)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final partnerId = partnerIdController.text.trim();
+                  final partnerName = partnerNameController.text.trim();
+                  final imageUrl = imageUrlController.text.trim();
+                  final linkUrl = linkUrlController.text.trim().isEmpty ? null : linkUrlController.text.trim();
+                  final order = int.tryParse(orderController.text.trim()) ?? 0;
+                  if (partnerId.isEmpty || partnerName.isEmpty || imageUrl.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Partner ID, name and image URL are required')),
+                    );
+                    return;
+                  }
+                  try {
+                    await createAd(
+                      partnerId: partnerId,
+                      partnerName: partnerName,
+                      imageUrl: imageUrl,
+                      linkUrl: linkUrl,
+                      order: order,
+                    );
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Ad added')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditAdDialog(BuildContext context, PartnerAd ad) {
+    final partnerIdController = TextEditingController(text: ad.partnerId);
+    final partnerNameController = TextEditingController(text: ad.partnerName);
+    final imageUrlController = TextEditingController(text: ad.imageUrl);
+    final linkUrlController = TextEditingController(text: ad.linkUrl ?? '');
+    final orderController = TextEditingController(text: '${ad.order}');
+    bool active = ad.active;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text('Edit ad'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: partnerIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Partner ID',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: partnerNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Partner name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: imageUrlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Banner image URL',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: linkUrlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Link URL (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: orderController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Order',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    title: const Text('Active'),
+                    value: active,
+                    onChanged: (v) {
+                      setDialogState(() => active = v ?? true);
+                    },
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final partnerId = partnerIdController.text.trim();
+                  final partnerName = partnerNameController.text.trim();
+                  final imageUrl = imageUrlController.text.trim();
+                  final linkUrl = linkUrlController.text.trim().isEmpty ? null : linkUrlController.text.trim();
+                  final order = int.tryParse(orderController.text.trim()) ?? 0;
+                  if (partnerId.isEmpty || partnerName.isEmpty || imageUrl.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Partner ID, name and image URL are required')),
+                    );
+                    return;
+                  }
+                  try {
+                    await updateAd(ad.id,
+                      partnerId: partnerId,
+                      partnerName: partnerName,
+                      imageUrl: imageUrl,
+                      linkUrl: linkUrl,
+                      order: order,
+                      active: active,
+                    );
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Ad updated')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

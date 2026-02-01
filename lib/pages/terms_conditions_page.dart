@@ -1,22 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 
-const String _kTermsAgreedKey = 'terms_agreed';
-
 /// Terms & Conditions: from Firestore content/terms or static fallback.
-/// Optional "I agree" saves to SharedPreferences for first-use tracking.
-class TermsConditionsPage extends StatefulWidget {
+/// Agreement step exists only during auction creation / listing flow, not here.
+class TermsConditionsPage extends StatelessWidget {
   const TermsConditionsPage({super.key});
 
-  @override
-  State<TermsConditionsPage> createState() => _TermsConditionsPageState();
-}
-
-class _TermsConditionsPageState extends State<TermsConditionsPage> {
-  bool _agreed = false;
-  bool _saving = false;
   static const String _staticTerms = '''
 1. Acceptance of Terms
 By using M Auction you agree to these Terms and Conditions. If you do not agree, do not use the service.
@@ -76,92 +66,21 @@ For questions about these terms, contact us via the Contact Us section in the ap
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.border),
-                  ),
-                  child: Text(
-                    body,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.textPrimary,
-                          height: 1.6,
-                        ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      CheckboxListTile(
-                        value: _agreed,
-                        onChanged: (v) => setState(() => _agreed = v ?? false),
-                        title: Text(
-                          'I have read and agree to the Terms & Conditions',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppTheme.textPrimary,
-                              ),
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: EdgeInsets.zero,
-                        activeColor: AppTheme.primaryBlue,
-                      ),
-                      const SizedBox(height: 8),
-                      FilledButton(
-                        onPressed: _agreed && !_saving
-                            ? () async {
-                                setState(() => _saving = true);
-                                try {
-                                  final prefs =
-                                      await SharedPreferences.getInstance();
-                                  await prefs.setBool(_kTermsAgreedKey, true);
-                                  if (mounted) {
-                                    Navigator.of(context).pop();
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Terms accepted'),
-                                        backgroundColor: AppTheme.success,
-                                      ),
-                                    );
-                                  }
-                                } finally {
-                                  if (mounted) setState(() => _saving = false);
-                                }
-                              }
-                            : null,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppTheme.primaryBlue,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: _saving
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              )
-                            : const Text('I agree'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.border),
+              ),
+              child: Text(
+                body,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textPrimary,
+                      height: 1.6,
+                    ),
+              ),
             ),
           );
         },

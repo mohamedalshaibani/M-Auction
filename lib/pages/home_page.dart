@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/watch_brand_picker.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
+import '../services/ads_service.dart';
 import '../models/category_model.dart';
 import '../models/watch_brand.dart';
+import 'request_ad_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -85,50 +88,10 @@ class _HomePageState extends State<HomePage> {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // Browse options (categories grid) at top
+            // Search at top
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    const crossAxisCount = 3;
-                    const spacing = 10.0;
-                    const aspectRatio = 0.82;
-                    return GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: crossAxisCount,
-                      mainAxisSpacing: spacing,
-                      crossAxisSpacing: spacing,
-                      childAspectRatio: aspectRatio,
-                      children: _categoryGroups.map((group) {
-                        final count = _categoryCounts[group.id] ?? 0;
-                        return _CategoryTile(
-                          categoryGroup: group,
-                          activeCount: count,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute<void>(
-                                builder: (context) => _CategoryListingPage(
-                                  categoryGroupId: group.id,
-                                  categoryGroupName: group.nameEn,
-                                  auctionService: _auctionService,
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      }).toList(),
-                    );
-                  },
-                ),
-              ),
-            ),
-            // Full-width search
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: Material(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -185,6 +148,46 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
+            // Browse options (categories grid)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    const crossAxisCount = 3;
+                    const spacing = 10.0;
+                    const aspectRatio = 0.82;
+                    return GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: crossAxisCount,
+                      mainAxisSpacing: spacing,
+                      crossAxisSpacing: spacing,
+                      childAspectRatio: aspectRatio,
+                      children: _categoryGroups.map((group) {
+                        final count = _categoryCounts[group.id] ?? 0;
+                        return _CategoryTile(
+                          categoryGroup: group,
+                          activeCount: count,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (context) => _CategoryListingPage(
+                                  categoryGroupId: group.id,
+                                  categoryGroupName: group.nameEn,
+                                  auctionService: _auctionService,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+              ),
+            ),
             // Create Auction button
             SliverToBoxAdapter(
               child: Padding(
@@ -282,25 +285,52 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            // Ads section at bottom: full-width edge-to-edge banners (reduced height)
+            // Ads section: one banner per partner from Firestore
             SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      'Partners',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w600,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Partners',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => const RequestAdPage(),
+                            ),
                           ),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Request an Ad'),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _BannerPlaceholder(),
-                  _BannerPlaceholder(),
-                  _BannerPlaceholder(),
+                  StreamBuilder<List<PartnerAd>>(
+                    stream: streamPartnerAdsOnePerPartner(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const SizedBox(height: 0);
+                      }
+                      final ads = snapshot.data!;
+                      return Column(
+                        children: ads
+                            .map((ad) => _PartnerBanner(ad: ad))
+                            .toList()
+                          ..add(const SizedBox(height: 24)),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -397,13 +427,17 @@ class _CategoryTile extends StatelessWidget {
   }
 }
 
-/// Full-width edge-to-edge partner/company banner (image-based); content fills width.
-class _BannerPlaceholder extends StatelessWidget {
+/// Full-width partner banner (one per partner). Tappable if linkUrl set.
+class _PartnerBanner extends StatelessWidget {
   static const double _bannerHeight = 72;
+  final PartnerAd ad;
+
+  const _PartnerBanner({required this.ad});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final useImage = ad.imageUrl.isNotEmpty;
+    Widget child = Container(
       width: double.infinity,
       height: _bannerHeight,
       decoration: BoxDecoration(
@@ -413,10 +447,33 @@ class _BannerPlaceholder extends StatelessWidget {
           bottom: BorderSide(color: AppTheme.border),
         ),
       ),
-      child: Center(
-        child: Icon(Icons.campaign_outlined, size: 28, color: AppTheme.textTertiary),
-      ),
+      child: useImage
+          ? Image.network(
+              ad.imageUrl,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: _bannerHeight,
+              errorBuilder: (_, __, ___) => Center(
+                child: Icon(Icons.campaign_outlined, size: 28, color: AppTheme.textTertiary),
+              ),
+            )
+          : Center(
+              child: Icon(Icons.campaign_outlined, size: 28, color: AppTheme.textTertiary),
+            ),
     );
+    final linkUrl = ad.linkUrl;
+    if (linkUrl != null && linkUrl.isNotEmpty) {
+      child = InkWell(
+        onTap: () async {
+          final uri = Uri.tryParse(linkUrl);
+          if (uri != null && await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
+        child: child,
+      );
+    }
+    return child;
   }
 }
 

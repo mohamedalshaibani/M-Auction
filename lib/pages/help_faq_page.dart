@@ -2,7 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 
-/// Help & FAQ: list from Firestore faq collection with search.
+/// Static FAQ entries (used when Firestore is empty or fails).
+final List<Map<String, String>> _staticFaq = [
+  {'question': 'What is M Auction?', 'answer': 'M Auction is a premium auction platform for luxury and high-value items. Sellers list items; buyers place bids. The highest bidder when the auction ends wins and completes the purchase.'},
+  {'question': 'Do I need to verify my identity?', 'answer': 'Yes. Identity verification (KYC) is required to list items or place bids. This helps keep the platform safe for everyone.'},
+  {'question': 'What is a deposit and when do I need it?', 'answer': 'A deposit may be required to bid on some auctions. It is held until the auction ends. If you win, it may be applied to the purchase or held until delivery is confirmed. If you don\'t win, it is released back to you.'},
+  {'question': 'How do I place a bid?', 'answer': 'Open an active auction, enter your bid amount (it must be at least the minimum increment above the current price), and tap Place Bid. You must have completed KYC and met any deposit requirement.'},
+  {'question': 'What happens when I win an auction?', 'answer': 'You will need to confirm the purchase, pay the final price and any buyer commission, and accept the sale agreement. Once the seller ships and you confirm delivery, the transaction is complete.'},
+  {'question': 'What fees apply?', 'answer': 'Sellers pay a listing fee when an auction goes live. When an item sells, commission may apply (shown at listing and checkout). All fees are displayed before you commit.'},
+  {'question': 'How do I list an item?', 'answer': 'Go to Create Auction, add photos and details, set a start price and duration, and submit for approval. Once approved, pay the listing fee to make the auction live.'},
+  {'question': 'Can I cancel a bid?', 'answer': 'Bids are binding. Only place a bid if you intend to buy at that price if you win. Contact support in exceptional circumstances.'},
+  {'question': 'How do I get help?', 'answer': 'Use the Contact Us page to email support or submit a message. You can also use Live Chat from the More tab to message the support team.'},
+];
+
+/// Help & FAQ: Firestore faq collection with static fallback and search.
 class HelpFaqPage extends StatefulWidget {
   const HelpFaqPage({super.key});
 
@@ -17,6 +30,21 @@ class _HelpFaqPageState extends State<HelpFaqPage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  List<Map<String, String>> _getItems(QuerySnapshot? snapshot) {
+    if (snapshot != null && snapshot.docs.isNotEmpty) {
+      final list = snapshot.docs.map((d) {
+        final data = d.data() as Map<String, dynamic>;
+        return <String, String>{
+          'question': data['question'] as String? ?? 'Question',
+          'answer': data['answer'] as String? ?? '',
+        };
+      }).toList();
+      list.sort((a, b) => (a['question'] ?? '').compareTo(b['question'] ?? ''));
+      return list;
+    }
+    return _staticFaq;
   }
 
   @override
@@ -63,49 +91,22 @@ class _HelpFaqPageState extends State<HelpFaqPage> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('faq').snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Unable to load FAQ',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.error,
-                            ),
-                      ),
-                    ),
-                  );
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                var docs = snapshot.data?.docs ?? [];
-                docs = List.from(docs)
-                  ..sort((a, b) {
-                    final ao = (a.data() as Map<String, dynamic>)['order'] as num?;
-                    final bo = (b.data() as Map<String, dynamic>)['order'] as num?;
-                    return ((ao ?? 0).compareTo(bo ?? 0));
-                  });
+                final items = snapshot.hasError || !snapshot.hasData || snapshot.data!.docs.isEmpty
+                    ? _staticFaq
+                    : _getItems(snapshot.data);
                 final query = _searchController.text.trim().toLowerCase();
                 final filtered = query.isEmpty
-                    ? docs
-                    : docs.where((d) {
-                        final data = d.data() as Map<String, dynamic>;
-                        final q =
-                            (data['question'] as String? ?? '').toLowerCase();
-                        final a =
-                            (data['answer'] as String? ?? '').toLowerCase();
+                    ? items
+                    : items.where((item) {
+                        final q = (item['question'] ?? '').toLowerCase();
+                        final a = (item['answer'] ?? '').toLowerCase();
                         return q.contains(query) || a.contains(query);
                       }).toList();
 
                 if (filtered.isEmpty) {
                   return Center(
                     child: Text(
-                      query.isEmpty
-                          ? 'No FAQ entries yet'
-                          : 'No results for "$query"',
+                      'No results for "$query"',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: AppTheme.textSecondary,
                           ),
@@ -117,14 +118,10 @@ class _HelpFaqPageState extends State<HelpFaqPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
-                    final doc = filtered[index];
-                    final data = doc.data() as Map<String, dynamic>;
-                    final question =
-                        data['question'] as String? ?? 'Question';
-                    final answer = data['answer'] as String? ?? '';
+                    final item = filtered[index];
                     return _FaqTile(
-                      question: question,
-                      answer: answer,
+                      question: item['question'] ?? 'Question',
+                      answer: item['answer'] ?? '',
                     );
                   },
                 );

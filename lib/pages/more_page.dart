@@ -1,42 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import 'about_app_page.dart';
 import 'contact_us_page.dart';
 import 'terms_conditions_page.dart';
 import 'help_faq_page.dart';
+import 'live_chat_page.dart';
+import 'request_ad_page.dart';
 
 /// More / Settings hub: About, Contact, Terms, FAQ, Live Chat, Share App.
 class MorePage extends StatelessWidget {
   const MorePage({super.key});
 
-  static const String _whatsAppUrl = 'https://wa.me/971501234567'; // Placeholder
   static const String _appStoreUrl = 'https://apps.apple.com/app/id123456789'; // Placeholder
   static const String _shareText = 'Check out M Auction – premium auctions.';
 
-  Future<void> _openWhatsApp(BuildContext context) async {
-    final uri = Uri.parse(_whatsAppUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open WhatsApp')),
-      );
-    }
-  }
-
   Future<void> _shareApp(BuildContext context) async {
+    const shareContent = '$_shareText $_appStoreUrl';
     try {
-      await Share.share(
-        '$_shareText $_appStoreUrl',
-        subject: 'M Auction',
-      );
+      await Share.share(shareContent, subject: 'M Auction');
     } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Share not available')),
-        );
+      if (!context.mounted) return;
+      try {
+        await Clipboard.setData(const ClipboardData(text: shareContent));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Link copied to clipboard'),
+              backgroundColor: AppTheme.success,
+            ),
+          );
+        }
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Share not available on this device')),
+          );
+        }
       }
     }
   }
@@ -73,7 +74,7 @@ class MorePage extends StatelessWidget {
           _MoreTile(
             icon: Icons.contact_support_outlined,
             title: 'Contact Us',
-            subtitle: 'WhatsApp, Call, Email',
+            subtitle: 'Email & contact form',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ContactUsPage()),
@@ -103,8 +104,21 @@ class MorePage extends StatelessWidget {
           _MoreTile(
             icon: Icons.chat_bubble_outline,
             title: 'Live Chat',
-            subtitle: 'Chat via WhatsApp',
-            onTap: () => _openWhatsApp(context),
+            subtitle: 'Chat with support',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LiveChatPage()),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _MoreTile(
+            icon: Icons.campaign_outlined,
+            title: 'Request an Ad',
+            subtitle: 'Partner advertising',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RequestAdPage()),
+            ),
           ),
           const SizedBox(height: 12),
           _MoreTile(
