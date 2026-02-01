@@ -6,10 +6,15 @@ import 'package:google_fonts/google_fonts.dart';
 /// Based on the brand logo with sophisticated blue palette
 class AppTheme {
   // Luxury Color Palette - Based on logo blue gradient
-  // Primary: Premium deep blue from logo
+  // Primary: Premium deep blue from logo (single source for all AppBars/headers)
   static const Color primaryBlue = Color(0xFF0B5ED7); // Premium deep blue
   static const Color primaryBlueDark = Color(0xFF0948A8); // Deeper variant
   static const Color primaryBlueLight = Color(0xFF3B82F6); // Lighter blue accent
+
+  // Header logo - consistent size across all pages for clear visibility
+  static const double headerLogoWidth = 96;
+  static const double headerLogoHeight = 52;
+  static const String logoAssetLight = 'assets/branding/logo_light.png';
   
   // Secondary: Elegant blue-grey accent
   static const Color secondaryBlue = Color(0xFF546E7A); // Sophisticated blue-grey

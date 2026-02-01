@@ -96,18 +96,26 @@ class _ExplorePageState extends State<ExplorePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
         title: Row(
           children: [
             SizedBox(
-              width: 90,
-              height: 52,
+              width: AppTheme.headerLogoWidth,
+              height: AppTheme.headerLogoHeight,
               child: Image.asset(
-                'assets/branding/logo_light.png',
+                AppTheme.logoAssetLight,
                 fit: BoxFit.contain,
               ),
             ),
             const SizedBox(width: 16),
-            const Text('Explore'),
+            Text(
+              'Explore',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+            ),
           ],
         ),
       ),

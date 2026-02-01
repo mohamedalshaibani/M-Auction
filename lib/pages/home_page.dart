@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import '../theme/app_theme.dart';
 import '../widgets/watch_brand_picker.dart';
 import '../services/auction_service.dart';
@@ -17,14 +16,21 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
   final _auctionService = AuctionService();
   final _adminSettings = AdminSettingsService();
   List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
+  bool _searchExpanded = false;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    _searchFocusNode.addListener(() {
+      if (!_searchFocusNode.hasFocus && mounted) {
+        setState(() => _searchExpanded = false);
+      }
+    });
   }
 
   Future<void> _loadCategories() async {
@@ -36,93 +42,129 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
-  }
-
-  String _formatTimeLeft(Timestamp? endsAt) {
-    if (endsAt == null) return 'No end date';
-    
-    final now = DateTime.now();
-    final endDate = endsAt.toDate();
-    final difference = endDate.difference(now);
-
-    if (difference.isNegative) {
-      return 'Ended';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}d ${difference.inHours % 24}h';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ${difference.inMinutes % 60}m';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m';
-    } else {
-      return 'Ending soon';
-    }
-  }
-
-  bool _isEndedState(String state) {
-    return state == 'ENDED' || state == 'ENDED_NO_RESPONSE';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: AppTheme.primaryBlue,
+        foregroundColor: Colors.white,
+        title: Row(
+          children: [
+            SizedBox(
+              width: AppTheme.headerLogoWidth,
+              height: AppTheme.headerLogoHeight,
+              child: Image.asset(
+                AppTheme.logoAssetLight,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              'M Auction',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+            ),
+          ],
+        ),
+      ),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // Top bar with logo and title
+            // Top row: search placeholder + Create Auction button
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: 96,
-                      height: 52,
-                      child: Image.asset(
-                        'assets/branding/logo_light.png',
-                        fit: BoxFit.contain,
+                    Expanded(
+                      child: Material(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          onTap: () {
+                            setState(() => _searchExpanded = true);
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _searchFocusNode.requestFocus();
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.search,
+                                  size: 22,
+                                  color: Colors.grey.shade600,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Search auctions...',
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                        color: Colors.grey.shade600,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Text(
-                      'M Auction',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pushNamed('/sellCreateAuction');
+                      },
+                      icon: const Icon(Icons.add, size: 20),
+                      label: const Text('Create Auction'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.primaryBlue,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-            
-            // Search field
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search auctions...',
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
+            // Second row: full-width search input (visible when expanded)
+            if (_searchExpanded)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    decoration: InputDecoration(
+                      hintText: 'Search auctions...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
+                    onChanged: (_) => setState(() {}),
                   ),
-                  onChanged: (_) {
-                    setState(() {}); // Trigger rebuild for search filtering
-                  },
                 ),
               ),
-            ),
-            
             const SliverToBoxAdapter(
               child: SizedBox(height: 20),
             ),
@@ -166,202 +208,6 @@ class _HomePageState extends State<HomePage> {
                   },
                 ),
               ),
-            ),
-            
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 20),
-            ),
-            
-            // Auction cards list from Firestore (all active, no category filter)
-            StreamBuilder<QuerySnapshot>(
-              stream: _auctionService.streamAllAuctions(limit: 50),
-              builder: (context, snapshot) {
-                if (kDebugMode) {
-                  debugPrint('HomePage: loading auctions');
-                }
-
-                if (snapshot.hasError) {
-                  return SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              size: 48,
-                              color: AppTheme.error,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Error loading auctions',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.error,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${snapshot.error}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: () {
-                                setState(() {}); // Retry by rebuilding
-                              },
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  // Skeleton loading cards
-                  return SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) => _SkeletonCard(),
-                      childCount: 3,
-                    ),
-                  );
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.inbox_outlined,
-                              size: 64,
-                              color: AppTheme.textTertiary,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No active auctions yet',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                // Apply filtering: active only, optional search (title, description, brand)
-                final searchQuery = _searchController.text.trim().toLowerCase();
-                var filteredDocs = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final state = data['state'] as String? ?? 'UNKNOWN';
-                  if (state != 'ACTIVE') return false;
-                  if (searchQuery.isNotEmpty) {
-                    final title = (data['title'] as String? ?? '').toLowerCase();
-                    final desc = (data['description'] as String? ?? '').toLowerCase();
-                    final brand = effectiveBrandDisplay(data).toLowerCase();
-                    if (!title.contains(searchQuery) &&
-                        !desc.contains(searchQuery) &&
-                        !brand.contains(searchQuery)) return false;
-                  }
-                  return true;
-                }).toList();
-
-                // Sort by endsAt ascending (ending soonest first)
-                filteredDocs.sort((a, b) {
-                  final aData = a.data() as Map<String, dynamic>;
-                  final bData = b.data() as Map<String, dynamic>;
-                  final aEndsAt = aData['endsAt'] as Timestamp?;
-                  final bEndsAt = bData['endsAt'] as Timestamp?;
-                  if (aEndsAt == null && bEndsAt == null) return 0;
-                  if (aEndsAt == null) return 1;
-                  if (bEndsAt == null) return -1;
-                  return aEndsAt.compareTo(bEndsAt);
-                });
-
-                if (filteredDocs.isEmpty) {
-                  return SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.search_off,
-                              size: 64,
-                              color: AppTheme.textTertiary,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No auctions match your filters',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.textSecondary,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                return SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final doc = filteredDocs[index];
-                      final data = doc.data() as Map<String, dynamic>;
-                      final auctionId = doc.id;
-                      
-                      // Extract fields with null-safety
-                      final title = data['title'] as String? ?? 'Untitled Auction';
-                      final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
-                      final endsAt = data['endsAt'] as Timestamp?;
-                      final state = data['state'] as String? ?? 'UNKNOWN';
-                      final category = effectiveSubcategory(data);
-                      // Get primary image URL from images array
-                      final images = data['images'] as List<dynamic>?;
-                      String? imageUrl;
-                      if (images != null && images.isNotEmpty) {
-                        // Find primary image, or use first image
-                        final primaryImage = images.firstWhere(
-                          (img) => img is Map && (img['isPrimary'] == true),
-                          orElse: () => images.first,
-                        );
-                        if (primaryImage is Map) {
-                          imageUrl = primaryImage['url'] as String?;
-                        } else if (primaryImage is String) {
-                          // Legacy format: array of strings
-                          imageUrl = primaryImage;
-                        }
-                      }
-                      
-                      final isEnded = _isEndedState(state);
-                      final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);
-                      
-                      return _AuctionCard(
-                        auctionId: auctionId,
-                        title: title,
-                        currentPrice: currentPrice,
-                        timeLeft: timeLeft,
-                        category: category,
-                        imageUrl: imageUrl,
-                        isEnded: isEnded,
-                      );
-                    },
-                    childCount: filteredDocs.length,
-                  ),
-                );
-              },
             ),
             
             const SliverToBoxAdapter(
