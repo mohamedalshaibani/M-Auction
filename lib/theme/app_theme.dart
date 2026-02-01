@@ -5,11 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 /// Luxury tech aesthetic - Professional, trustworthy, modern (2025/2026 style)
 /// Based on the brand logo with sophisticated blue palette
 class AppTheme {
-  // Luxury Color Palette - Based on logo blue gradient
-  // Primary: Premium deep blue from logo (single source for all AppBars/headers)
-  static const Color primaryBlue = Color(0xFF0B5ED7); // Premium deep blue
-  static const Color primaryBlueDark = Color(0xFF0948A8); // Deeper variant
-  static const Color primaryBlueLight = Color(0xFF3B82F6); // Lighter blue accent
+  // Luxury Color Palette - Softer blue aligned with logo tone (lighter, cleaner)
+  // Primary: Soft premium blue (single source for all AppBars/headers)
+  static const Color primaryBlue = Color(0xFF3B82F6); // Softer, cleaner blue
+  static const Color primaryBlueDark = Color(0xFF2563EB); // Slightly deeper variant
+  static const Color primaryBlueLight = Color(0xFF60A5FA); // Lighter accent
 
   // Header logo - consistent size across all pages for clear visibility
   static const double headerLogoWidth = 96;
@@ -37,7 +37,7 @@ class AppTheme {
   static const Color success = Color(0xFF2E7D32); // Deeper, more professional green
   static const Color error = Color(0xFFC62828); // Refined red
   static const Color warning = Color(0xFFF57C00); // Warm orange
-  static const Color info = Color(0xFF1565C0); // Matches primary
+  static const Color info = Color(0xFF3B82F6); // Matches primary
   
   // Border and divider (softer, more subtle)
   static const Color border = Color(0xFFE8E8E8); // Softer border
@@ -55,7 +55,7 @@ class AppTheme {
       colorScheme: ColorScheme.light(
         primary: primaryBlue,
         onPrimary: Colors.white,
-        primaryContainer: const Color(0xFFD6E4FF), // Light blue container
+        primaryContainer: const Color(0xFFEFF6FF), // Very soft blue container
         onPrimaryContainer: primaryBlueDark,
         secondary: secondaryBlue,
         onSecondary: Colors.white,
