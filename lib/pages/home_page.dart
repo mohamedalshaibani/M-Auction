@@ -816,96 +816,107 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: Text('${widget.categoryGroupName} Auctions'),
         backgroundColor: AppTheme.primaryBlue,
         foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          '${widget.categoryGroupName} Auctions',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+        ),
       ),
       body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_subcategories.length >= 2) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _SubcategoryChip(
-                        label: 'All',
-                        isSelected: _selectedSubcategoryId == null,
-                        onTap: () => setState(() => _selectedSubcategoryId = null),
+            Container(
+              color: AppTheme.backgroundLight,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_subcategories.length >= 2) ...[
+                    SizedBox(
+                      height: 36,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _SubcategoryChip(
+                            label: 'All',
+                            isSelected: _selectedSubcategoryId == null,
+                            onTap: () => setState(() => _selectedSubcategoryId = null),
+                          ),
+                          const SizedBox(width: 8),
+                          ..._subcategories.map((s) => Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: _SubcategoryChip(
+                                  label: s.nameEn,
+                                  isSelected: _selectedSubcategoryId == s.id,
+                                  onTap: () => setState(() => _selectedSubcategoryId = s.id),
+                                ),
+                              )),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      ..._subcategories.map((s) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: _SubcategoryChip(
-                              label: s.nameEn,
-                              isSelected: _selectedSubcategoryId == s.id,
-                              onTap: () => setState(() => _selectedSubcategoryId = s.id),
-                            ),
-                          )),
-                    ],
-                  ),
-                ),
+                    ),
+                    if (widget.categoryGroupId == 'watches' && _watchBrands.isNotEmpty)
+                      const SizedBox(height: 10),
+                  ],
+                  if (widget.categoryGroupId == 'watches' && _watchBrands.isNotEmpty)
+                    WatchBrandPicker(
+                      brands: _watchBrands,
+                      selectedBrandId: _selectedWatchBrandId,
+                      onChanged: (value) => setState(() => _selectedWatchBrandId = value),
+                      allowAll: true,
+                      label: 'Brand',
+                    ),
+                ],
               ),
-            ],
-            if (widget.categoryGroupId == 'watches' && _watchBrands.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: WatchBrandPicker(
-                  brands: _watchBrands,
-                  selectedBrandId: _selectedWatchBrandId,
-                  onChanged: (value) => setState(() => _selectedWatchBrandId = value),
-                  allowAll: true,
-                  label: 'Brand',
-                ),
-              ),
+            ),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: widget.auctionService.streamAllAuctions(limit: 50),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.error_outline, size: 48, color: AppTheme.error),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Error loading auctions',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppTheme.error,
-                                ),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.error_outline, size: 44, color: AppTheme.error),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Error loading auctions',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: AppTheme.error,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return ListView.builder(
-                      itemCount: 3,
-                      itemBuilder: (_, __) => _SkeletonCard(),
+                    return ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      children: List.generate(5, (_) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _CategoryRowSkeleton(),
+                      )),
                     );
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.inbox_outlined, size: 64, color: AppTheme.textTertiary),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No active auctions in ${widget.categoryGroupName}',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    );
+                    return _CategoryEmptyState(categoryName: widget.categoryGroupName);
                   }
                   final groupId = widget.categoryGroupId;
                   final subId = _selectedSubcategoryId;
@@ -940,25 +951,10 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                     return aEndsAt.compareTo(bEndsAt);
                   });
                   if (filteredDocs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.inbox_outlined, size: 64, color: AppTheme.textTertiary),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No active auctions in ${widget.categoryGroupName}',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    );
+                    return _CategoryEmptyState(categoryName: widget.categoryGroupName);
                   }
                   return ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     itemCount: filteredDocs.length,
                     itemBuilder: (context, index) {
                       final doc = filteredDocs[index];
@@ -968,7 +964,6 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                       final currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
                       final endsAt = data['endsAt'] as Timestamp?;
                       final state = data['state'] as String? ?? 'UNKNOWN';
-                      final displayCategory = effectiveSubcategory(data);
                       final images = data['images'] as List<dynamic>?;
                       String? imageUrl;
                       if (images != null && images.isNotEmpty) {
@@ -984,14 +979,16 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                       }
                       final isEnded = _isEndedState(state);
                       final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);
-                      return _AuctionCard(
-                        auctionId: auctionId,
-                        title: title,
-                        currentPrice: currentPrice,
-                        timeLeft: timeLeft,
-                        category: displayCategory,
-                        imageUrl: imageUrl,
-                        isEnded: isEnded,
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _CategoryListingRowCard(
+                          auctionId: auctionId,
+                          title: title,
+                          currentPrice: currentPrice,
+                          timeLeft: timeLeft,
+                          isEnded: isEnded,
+                          imageUrl: imageUrl,
+                        ),
                       );
                     },
                   );
@@ -1018,21 +1015,257 @@ class _SubcategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (_) => onTap(),
-      selectedColor: Theme.of(context).colorScheme.primaryContainer,
-      checkmarkColor: AppTheme.primaryBlue,
-      labelStyle: TextStyle(
-        color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
-        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
+              width: isSelected ? 1.5 : 1,
+            ),
+            color: isSelected ? AppTheme.primaryBlue.withValues(alpha: 0.12) : AppTheme.surface,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+                ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ),
-      side: BorderSide(
-        color: isSelected ? AppTheme.primaryBlue : AppTheme.border,
-        width: 1,
+    );
+  }
+}
+
+/// Wide horizontal row card for category listing (matches Explore premium style).
+class _CategoryListingRowCard extends StatelessWidget {
+  final String auctionId;
+  final String title;
+  final double currentPrice;
+  final String timeLeft;
+  final bool isEnded;
+  final String? imageUrl;
+
+  const _CategoryListingRowCard({
+    required this.auctionId,
+    required this.title,
+    required this.currentPrice,
+    required this.timeLeft,
+    required this.isEnded,
+    this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      child: InkWell(
+        onTap: () => Navigator.pushNamed(context, '/auctionDetail?auctionId=$auctionId'),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: imageUrl != null && imageUrl!.isNotEmpty
+                      ? Image.network(
+                          imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _CategoryRowImagePlaceholder(),
+                        )
+                      : _CategoryRowImagePlaceholder(),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'AED ${currentPrice.toStringAsFixed(0)}',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: AppTheme.primaryBlue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          isEnded ? Icons.check_circle_outline : Icons.access_time,
+                          size: 14,
+                          color: AppTheme.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          timeLeft,
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    );
+  }
+}
+
+class _CategoryRowImagePlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.backgroundGrey,
+      child: Center(
+        child: Icon(Icons.image_outlined, size: 28, color: AppTheme.textTertiary),
+      ),
+    );
+  }
+}
+
+/// Skeleton for category listing row (loading state).
+class _CategoryRowSkeleton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: AppTheme.backgroundGrey,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 14,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 14,
+                  width: 80,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  height: 12,
+                  width: 60,
+                  decoration: BoxDecoration(
+                    color: AppTheme.backgroundGrey,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Empty state for category listing (premium style).
+class _CategoryEmptyState extends StatelessWidget {
+  final String categoryName;
+
+  const _CategoryEmptyState({required this.categoryName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.inbox_outlined, size: 48, color: AppTheme.textTertiary),
+              const SizedBox(height: 16),
+              Text(
+                'No active auctions in $categoryName',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Check back later or browse other categories',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textTertiary,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
