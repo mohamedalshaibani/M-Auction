@@ -128,11 +128,16 @@ class AdminSettingsService {
     return (antiSniping?['extendMinutes'] as num?)?.toInt() ?? 2;
   }
 
-  // Duration options
+  // Duration options (3, 5, 7 days only; filter to these if admin has others)
   Future<List<int>> getDurationOptions() async {
+    const allowed = [3, 5, 7];
     final settings = await _fetchSettings();
     final durations = settings['durationOptions'] as List<dynamic>?;
-    return durations?.map((e) => (e as num).toInt()).toList() ?? [7, 14, 21];
+    if (durations == null || durations.isEmpty) {
+      return List.from(allowed);
+    }
+    final list = durations.map((e) => (e as num).toInt()).where((d) => allowed.contains(d)).toList();
+    return list.isEmpty ? List.from(allowed) : list..sort();
   }
 
   // Listing fee

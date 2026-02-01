@@ -25,6 +25,7 @@ class AuctionService {
     required String condition,
     required String itemIdentifier,
     required double startPrice,
+    double? reservePrice,
     required int durationDays,
     List<String>? images,
   }) async {
@@ -46,6 +47,7 @@ class AuctionService {
       'itemIdentifier': itemIdentifier,
       'images': images ?? [],
       'startPrice': startPrice,
+      'reservePrice': reservePrice,
       'currentPrice': startPrice,
       'currentWinnerId': null,
       'bidCount': 0,
@@ -438,13 +440,24 @@ class AuctionService {
     }
   }
 
-    // End auction and handle deposit hold
+  // End auction and handle deposit hold
   Future<void> _endAuction(String auctionId, Map<String, dynamic> auctionData) async {
     final auctionRef = _firestore.collection('auctions').doc(auctionId);
     final winnerId = auctionData['currentWinnerId'] as String?;
     final currentPrice = (auctionData['currentPrice'] as num?)?.toDouble() ?? 0.0;
+    final reservePrice = (auctionData['reservePrice'] as num?)?.toDouble();
     final sellerId = auctionData['sellerId'] as String? ?? '';
     final endsAt = auctionData['endsAt'] as Timestamp?;
+
+    // Reserve not met: reject all bids, auction not sold
+    if (reservePrice != null && currentPrice < reservePrice) {
+      await _releaseAllReservationsForAuction(auctionId);
+      await auctionRef.update({
+        'state': 'ENDED',
+        'reserveNotMet': true,
+      });
+      return;
+    }
 
     if (winnerId == null || winnerId.isEmpty) {
       // No winner - release all reservations and end

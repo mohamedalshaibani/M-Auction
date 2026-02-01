@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../theme/app_theme.dart';
+import '../widgets/watch_brand_picker.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
 import '../models/category_model.dart';
@@ -771,7 +772,7 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_subcategories.isNotEmpty) ...[
+            if (_subcategories.length >= 2) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                 child: SingleChildScrollView(
@@ -800,18 +801,12 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
             if (widget.categoryGroupId == 'watches' && _watchBrands.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: DropdownButtonFormField<String>(
-                  value: _selectedWatchBrandId,
-                  decoration: const InputDecoration(
-                    labelText: 'Brand',
-                    filled: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('All brands')),
-                    ..._watchBrands.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))),
-                  ],
+                child: WatchBrandPicker(
+                  brands: _watchBrands,
+                  selectedBrandId: _selectedWatchBrandId,
                   onChanged: (value) => setState(() => _selectedWatchBrandId = value),
+                  allowAll: true,
+                  label: 'Brand',
                 ),
               ),
             Expanded(

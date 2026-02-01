@@ -7,6 +7,7 @@ import '../models/category_model.dart';
 import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
 import '../widgets/auction_image_uploader.dart';
+import '../widgets/watch_brand_picker.dart';
 
 class EditDraftAuctionPage extends StatefulWidget {
   final String auctionId;
@@ -21,10 +22,13 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _conditionController = TextEditingController();
   final _itemIdentifierController = TextEditingController();
   final _startPriceController = TextEditingController();
+  final _reservePriceController = TextEditingController();
   final _brandTextController = TextEditingController();
+
+  static const List<String> _conditionOptions = ['New', 'Like New', 'Good', 'Fair', 'Used'];
+  String? _selectedCondition;
 
   List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
   List<Subcategory> _subcategories = defaultSubcategories.where((s) => s.parentId == 'bags').toList();
@@ -108,7 +112,9 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         _categoryGroups = groups;
         _selectedCategoryGroupId = groupId;
         _subcategories = subs;
-        _selectedSubcategoryId = subs.any((s) => s.id == subId) ? subId : (subs.isNotEmpty ? subs.first.id : null);
+        _selectedSubcategoryId = subs.length == 1
+            ? subs.first.id
+            : (subs.any((s) => s.id == subId) ? subId : (subs.isNotEmpty ? subs.first.id : null));
         if (groupId == 'bags') {
           _selectedBrandId = data['brand'] as String?;
         } else if (groupId == 'watches') {
@@ -129,9 +135,12 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         _selectedDurationDays = data['durationDays'] as int?;
         _titleController.text = data['title'] as String? ?? '';
         _descriptionController.text = data['description'] as String? ?? '';
-        _conditionController.text = data['condition'] as String? ?? '';
+        final cond = data['condition'] as String? ?? '';
+        _selectedCondition = _conditionOptions.contains(cond) ? cond : _conditionOptions.first;
         _itemIdentifierController.text = data['itemIdentifier'] as String? ?? '';
         _startPriceController.text = (data['startPrice'] as num?)?.toString() ?? '';
+        final rp = data['reservePrice'] as num?;
+        _reservePriceController.text = rp != null ? rp.toString() : '';
         _isLoadingData = false;
       });
     } catch (e) {
@@ -146,9 +155,9 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
-    _conditionController.dispose();
     _itemIdentifierController.dispose();
     _startPriceController.dispose();
+    _reservePriceController.dispose();
     _brandTextController.dispose();
     super.dispose();
   }
@@ -159,7 +168,7 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
     setState(() {
       _selectedCategoryGroupId = groupId;
       _subcategories = subs;
-      _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
+      _selectedSubcategoryId = subs.length == 1 ? subs.first.id : (subs.isNotEmpty ? subs.first.id : null);
       if (groupId == 'bags') {
         _selectedBrandId = _bagBrands.isNotEmpty ? _bagBrands.first : null;
         _brandTextController.clear();
@@ -181,7 +190,10 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       return;
     }
 
-    if (_selectedSubcategoryId == null || _selectedDurationDays == null) {
+    final effectiveSubId = _subcategories.length == 1
+        ? _subcategories.first.id
+        : _selectedSubcategoryId;
+    if (effectiveSubId == null || _selectedDurationDays == null) {
       setState(() => _error = 'Please select category and duration');
       return;
     }
@@ -216,15 +228,27 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
 
     try {
       final startPrice = double.parse(_startPriceController.text);
+      final reserveText = _reservePriceController.text.trim();
+      final reservePrice = reserveText.isEmpty ? null : double.tryParse(reserveText);
+      if (reserveText.isNotEmpty && (reservePrice == null || reservePrice < 0)) {
+        setState(() => _error = 'Please enter a valid reserve price');
+        _isLoading = false;
+        return;
+      }
+      if (reservePrice != null && reservePrice > startPrice) {
+        setState(() => _error = 'Reserve price cannot exceed start price');
+        _isLoading = false;
+        return;
+      }
 
       final updateData = <String, dynamic>{
         'categoryGroup': _selectedCategoryGroupId,
-        'subcategory': _selectedSubcategoryId!,
-        'category': _selectedSubcategoryId!,
+        'subcategory': effectiveSubId,
+        'category': effectiveSubId,
         'brand': brand,
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
-        'condition': _conditionController.text.trim(),
+        'condition': _selectedCondition ?? _conditionOptions.first,
         'itemIdentifier': _itemIdentifierController.text.trim(),
         'startPrice': startPrice,
         'currentPrice': startPrice, // Update current price too
@@ -233,6 +257,11 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       };
       if (brandId != null && brandId.isNotEmpty) {
         updateData['brandId'] = brandId;
+      }
+      if (reservePrice != null) {
+        updateData['reservePrice'] = reservePrice;
+      } else {
+        updateData['reservePrice'] = FieldValue.delete();
       }
       await FirebaseFirestore.instance
           .collection('auctions')
@@ -274,7 +303,10 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       return;
     }
 
-    if (_selectedSubcategoryId == null || _selectedDurationDays == null) {
+    final effectiveSubIdForSubmit = _subcategories.length == 1
+        ? _subcategories.first.id
+        : _selectedSubcategoryId;
+    if (effectiveSubIdForSubmit == null || _selectedDurationDays == null) {
       if (mounted) {
         setState(() => _error = 'Please select category and duration');
       }
@@ -315,15 +347,17 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
 
     try {
       final startPrice = double.parse(_startPriceController.text);
+      final reserveText = _reservePriceController.text.trim();
+      final reservePriceForSubmit = reserveText.isEmpty ? null : double.tryParse(reserveText);
 
       final updateData = <String, dynamic>{
         'categoryGroup': _selectedCategoryGroupId,
-        'subcategory': _selectedSubcategoryId!,
-        'category': _selectedSubcategoryId!,
+        'subcategory': effectiveSubIdForSubmit,
+        'category': effectiveSubIdForSubmit,
         'brand': brandForSubmit,
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
-        'condition': _conditionController.text.trim(),
+        'condition': _selectedCondition ?? _conditionOptions.first,
         'itemIdentifier': _itemIdentifierController.text.trim(),
         'startPrice': startPrice,
         'currentPrice': startPrice,
@@ -332,6 +366,11 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       };
       if (brandIdForSubmit != null && brandIdForSubmit.isNotEmpty) {
         updateData['brandId'] = brandIdForSubmit;
+      }
+      if (reservePriceForSubmit != null) {
+        updateData['reservePrice'] = reservePriceForSubmit;
+      } else {
+        updateData['reservePrice'] = FieldValue.delete();
       }
       await FirebaseFirestore.instance
           .collection('auctions')
@@ -402,25 +441,26 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
                 if (value != null) _onCategoryGroupChanged(value);
               },
             ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedSubcategoryId,
-              decoration: const InputDecoration(labelText: 'Subcategory'),
-              items: _subcategories
-                  .map((s) => DropdownMenuItem(value: s.id, child: Text(s.nameEn)))
-                  .toList(),
-              onChanged: (value) => setState(() => _selectedSubcategoryId = value),
-            ),
+            if (_subcategories.length >= 2) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedSubcategoryId,
+                decoration: const InputDecoration(labelText: 'Subcategory'),
+                items: _subcategories
+                    .map((s) => DropdownMenuItem(value: s.id, child: Text(s.nameEn)))
+                    .toList(),
+                onChanged: (value) => setState(() => _selectedSubcategoryId = value),
+              ),
+            ],
             const SizedBox(height: 16),
             if (useBrandDropdown)
               isWatches
-                  ? DropdownButtonFormField<String>(
-                      value: _selectedBrandId,
-                      decoration: const InputDecoration(labelText: 'Brand'),
-                      items: _watchBrands
-                          .map((b) => DropdownMenuItem(value: b.id, child: Text(b.name)))
-                          .toList(),
+                  ? WatchBrandPicker(
+                      brands: _watchBrands,
+                      selectedBrandId: _selectedBrandId,
                       onChanged: (value) => setState(() => _selectedBrandId = value),
+                      allowAll: false,
+                      label: 'Brand',
                     )
                   : DropdownButtonFormField<String>(
                       value: _selectedBrandId,
@@ -459,15 +499,13 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
               },
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _conditionController,
+            DropdownButtonFormField<String>(
+              value: _selectedCondition ?? _conditionOptions.first,
               decoration: const InputDecoration(labelText: 'Condition'),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter condition';
-                }
-                return null;
-              },
+              items: _conditionOptions
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
+              onChanged: (value) => setState(() => _selectedCondition = value),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -495,6 +533,24 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _reservePriceController,
+              decoration: const InputDecoration(
+                labelText: 'Reserve Price (Minimum Selling Price)',
+                hintText: 'Optional',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 12, right: 12),
+              child: Text(
+                'If bids do not reach the reserve price, the app will automatically reject all bids and the auction will not be sold.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+              ),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(

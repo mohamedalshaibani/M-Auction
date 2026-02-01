@@ -6,6 +6,7 @@ import '../services/admin_settings_service.dart';
 import '../models/category_model.dart';
 import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
+import '../widgets/watch_brand_picker.dart';
 
 class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key});
@@ -216,7 +217,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 ),
               ),
             ),
-            if (_selectedCategoryGroupId != null && _subcategories.isNotEmpty)
+            if (_selectedCategoryGroupId != null && _subcategories.length >= 2)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
@@ -261,18 +262,12 @@ class _ExplorePageState extends State<ExplorePage> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedWatchBrandId,
-                    decoration: const InputDecoration(
-                      labelText: 'Brand',
-                      filled: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    ),
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('All brands')),
-                      ..._watchBrands.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))),
-                    ],
+                  child: WatchBrandPicker(
+                    brands: _watchBrands,
+                    selectedBrandId: _selectedWatchBrandId,
                     onChanged: (value) => setState(() => _selectedWatchBrandId = value),
+                    allowAll: true,
+                    label: 'Brand',
                   ),
                 ),
               ),

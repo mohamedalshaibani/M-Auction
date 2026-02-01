@@ -223,6 +223,73 @@ class AuctionImageService {
     return ref.getDownloadURL();
   }
 
+  /// Upload invoice image (ownership verification). Stored separately; never shown in listing.
+  Future<void> uploadInvoiceImage({
+    required String auctionId,
+    required File file,
+    String? contentType,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('User must be authenticated');
+
+    final auctionRef = _firestore.collection('auctions').doc(auctionId);
+    final auctionDoc = await auctionRef.get();
+    if (!auctionDoc.exists) throw Exception('Auction not found');
+    final auctionData = auctionDoc.data()!;
+    final ownerUid = auctionData['ownerUid'] as String? ?? auctionData['sellerId'] as String?;
+    if (ownerUid != user.uid) throw Exception('Only auction owner can upload invoice image');
+
+    final fileSize = await file.length();
+    final detectedContentType = contentType ?? 'image/jpeg';
+    if (!validateImage(fileSizeBytes: fileSize, contentType: detectedContentType)) {
+      throw Exception('Invalid image: size <= 5MB, jpg/png/webp only');
+    }
+
+    String extension = 'jpg';
+    if (detectedContentType.contains('png')) extension = 'png';
+    else if (detectedContentType.contains('webp')) extension = 'webp';
+    final storagePath = 'auctions/$auctionId/invoice/invoice.$extension';
+    final ref = _storage.ref(storagePath);
+
+    final metadata = SettableMetadata(
+      contentType: detectedContentType,
+      customMetadata: {'uploadedBy': user.uid, 'auctionId': auctionId},
+    );
+    await ref.putFile(file, metadata);
+    final url = await ref.getDownloadURL();
+
+    await auctionRef.update({
+      'invoiceImagePath': storagePath,
+      'invoiceImageUrl': url,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Remove invoice image from auction (and delete from Storage if desired).
+  Future<void> deleteInvoiceImage(String auctionId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('User must be authenticated');
+
+    final auctionRef = _firestore.collection('auctions').doc(auctionId);
+    final auctionDoc = await auctionRef.get();
+    if (!auctionDoc.exists) return;
+    final auctionData = auctionDoc.data()!;
+    final ownerUid = auctionData['ownerUid'] as String? ?? auctionData['sellerId'] as String?;
+    if (ownerUid != user.uid) throw Exception('Only auction owner can delete invoice image');
+
+    final path = auctionData['invoiceImagePath'] as String?;
+    if (path != null && path.isNotEmpty) {
+      try {
+        await _storage.ref(path).delete();
+      } catch (_) {}
+    }
+    await auctionRef.update({
+      'invoiceImagePath': FieldValue.delete(),
+      'invoiceImageUrl': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   // Add image metadata via direct Firestore update (no Cloud Function).
   // NOTE: This is now primarily called by the Storage trigger, not the widget.
   // Keeps url when provided (upload-only flow) so images display without watermark.

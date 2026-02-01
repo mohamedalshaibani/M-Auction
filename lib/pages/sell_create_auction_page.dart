@@ -6,6 +6,7 @@ import '../services/admin_settings_service.dart';
 import '../models/category_model.dart';
 import '../models/watch_brand.dart';
 import '../widgets/auction_image_uploader.dart';
+import '../widgets/watch_brand_picker.dart';
 import '../theme/app_theme.dart';
 
 class SellCreateAuctionPage extends StatefulWidget {
@@ -19,10 +20,13 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _conditionController = TextEditingController();
   final _itemIdentifierController = TextEditingController();
   final _startPriceController = TextEditingController();
+  final _reservePriceController = TextEditingController();
   final _brandTextController = TextEditingController();
+
+  static const List<String> _conditionOptions = ['New', 'Like New', 'Good', 'Fair', 'Used'];
+  String? _selectedCondition;
 
   List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
   List<Subcategory> _subcategories = defaultSubcategories.where((s) => s.parentId == 'bags').toList();
@@ -64,6 +68,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
           _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
           _selectedBrandId = _bagBrands.isNotEmpty ? _bagBrands.first : null;
           _selectedDurationDays = _durationOptions.isNotEmpty ? _durationOptions.first : null;
+          _selectedCondition = _conditionOptions.first;
         });
       }
     } catch (e) {
@@ -94,9 +99,9 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
-    _conditionController.dispose();
     _itemIdentifierController.dispose();
     _startPriceController.dispose();
+    _reservePriceController.dispose();
     _brandTextController.dispose();
     super.dispose();
   }
@@ -173,7 +178,10 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       return;
     }
 
-    if (_selectedSubcategoryId == null || _selectedDurationDays == null) {
+    final effectiveSubId = _subcategories.length == 1
+        ? _subcategories.first.id
+        : _selectedSubcategoryId;
+    if (effectiveSubId == null || _selectedDurationDays == null) {
       setState(() => _error = 'Please select category and duration');
       return;
     }
@@ -209,19 +217,32 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
 
     try {
       final startPrice = double.parse(_startPriceController.text);
+      final reserveText = _reservePriceController.text.trim();
+      final reservePrice = reserveText.isEmpty ? null : double.tryParse(reserveText);
+      if (reserveText.isNotEmpty && (reservePrice == null || reservePrice < 0)) {
+        setState(() => _error = 'Please enter a valid reserve price');
+        _isLoading = false;
+        return;
+      }
+      if (reservePrice != null && reservePrice > startPrice) {
+        setState(() => _error = 'Reserve price cannot exceed start price');
+        _isLoading = false;
+        return;
+      }
 
       // Create draft auction first (needed for image upload)
       final auctionId = await _auctionService.createDraftAuction(
         sellerId: user.uid,
         categoryGroup: _selectedCategoryGroupId,
-        subcategory: _selectedSubcategoryId!,
+        subcategory: effectiveSubId,
         brand: brand,
         brandId: brandId,
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
-        condition: _conditionController.text.trim(),
+        condition: _selectedCondition ?? _conditionOptions.first,
         itemIdentifier: _itemIdentifierController.text.trim(),
         startPrice: startPrice,
+        reservePrice: reservePrice,
         durationDays: _selectedDurationDays!,
       );
 
@@ -287,30 +308,31 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
                 if (value != null) _onCategoryGroupChanged(value);
               },
             ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedSubcategoryId,
-              decoration: const InputDecoration(labelText: 'Subcategory'),
-              items: _subcategories
-                  .map((s) => DropdownMenuItem(
-                        value: s.id,
-                        child: Text(s.nameEn),
-                      ))
-                  .toList(),
-              onChanged: (value) {
-                setState(() => _selectedSubcategoryId = value);
-              },
-            ),
+            if (_subcategories.length >= 2) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedSubcategoryId,
+                decoration: const InputDecoration(labelText: 'Subcategory'),
+                items: _subcategories
+                    .map((s) => DropdownMenuItem(
+                          value: s.id,
+                          child: Text(s.nameEn),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  setState(() => _selectedSubcategoryId = value);
+                },
+              ),
+            ],
             const SizedBox(height: 16),
             if (useBrandDropdown)
               isWatches
-                  ? DropdownButtonFormField<String>(
-                      value: _selectedBrandId,
-                      decoration: const InputDecoration(labelText: 'Brand'),
-                      items: _watchBrands
-                          .map((b) => DropdownMenuItem(value: b.id, child: Text(b.name)))
-                          .toList(),
+                  ? WatchBrandPicker(
+                      brands: _watchBrands,
+                      selectedBrandId: _selectedBrandId,
                       onChanged: (value) => setState(() => _selectedBrandId = value),
+                      allowAll: false,
+                      label: 'Brand',
                     )
                   : DropdownButtonFormField<String>(
                       value: _selectedBrandId,
@@ -349,15 +371,13 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
               },
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _conditionController,
+            DropdownButtonFormField<String>(
+              value: _selectedCondition ?? _conditionOptions.first,
               decoration: const InputDecoration(labelText: 'Condition'),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter condition';
-                }
-                return null;
-              },
+              items: _conditionOptions
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
+              onChanged: (value) => setState(() => _selectedCondition = value),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -385,6 +405,24 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _reservePriceController,
+              decoration: const InputDecoration(
+                labelText: 'Reserve Price (Minimum Selling Price)',
+                hintText: 'Optional',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 12, right: 12),
+              child: Text(
+                'If bids do not reach the reserve price, the app will automatically reject all bids and the auction will not be sold.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+              ),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(

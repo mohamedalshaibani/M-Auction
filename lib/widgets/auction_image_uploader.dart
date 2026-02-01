@@ -28,6 +28,7 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
   final Map<String, String> _uploadStatus = {}; // imageId -> status
   final Map<String, double> _uploadProgress = {}; // imageId -> progress
   bool _isUploading = false; // Track if upload is in progress
+  bool _isUploadingInvoice = false;
   static const int _maxConcurrentUploads = 1; // One at a time to avoid OOM / "Lost connection" on iOS
 
   @override
@@ -267,6 +268,63 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
     }
   }
 
+  Future<void> _pickInvoiceImage() async {
+    try {
+      final file = await _picker.pickImage(source: ImageSource.gallery);
+      if (file == null || !mounted) return;
+      final size = await file.length();
+      final contentType = await _getContentType(file);
+      if (!_imageService.validateImage(fileSizeBytes: size, contentType: contentType)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid file (max 5MB, jpg/png/webp only)'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _isUploadingInvoice = true);
+      await _imageService.uploadInvoiceImage(
+        auctionId: widget.auctionId,
+        file: File(file.path),
+        contentType: contentType,
+      );
+      if (mounted) {
+        setState(() => _isUploadingInvoice = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invoice image uploaded'), backgroundColor: AppTheme.success),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingInvoice = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeInvoiceImage() async {
+    try {
+      await _imageService.deleteInvoiceImage(widget.auctionId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invoice image removed')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        );
+      }
+    }
+  }
+
   Future<void> _setPrimary(String imageId) async {
     if (!mounted) return;
     
@@ -330,6 +388,7 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
 
         final data = snapshot.data!.data() as Map<String, dynamic>?;
         final images = List<Map<String, dynamic>>.from(data?['images'] as List? ?? []);
+        final invoiceUrl = data?['invoiceImageUrl'] as String? ?? '';
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,6 +460,68 @@ class _AuctionImageUploaderState extends State<AuctionImageUploader> {
                   ),
                 );
               }),
+            ],
+            // Invoice Image (draft only; not shown in listing)
+            if (widget.isDraft) ...[
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 16),
+              Text(
+                'Invoice Image',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'This image is for ownership verification and will NOT be shown in the auction listing.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              if (invoiceUrl.isNotEmpty)
+                Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        invoiceUrl,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 48),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton.icon(
+                      onPressed: _removeInvoiceImage,
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      label: const Text('Remove'),
+                    ),
+                  ],
+                )
+              else if (_isUploadingInvoice)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 12),
+                      Text('Uploading invoice image...'),
+                    ],
+                  ),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: _pickInvoiceImage,
+                  icon: const Icon(Icons.upload_file, size: 20),
+                  label: const Text('Add Invoice Image'),
+                ),
             ],
           ],
         );
