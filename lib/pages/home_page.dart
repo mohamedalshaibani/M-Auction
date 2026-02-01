@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
 import '../models/category_model.dart';
+import '../models/watch_brand.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -257,7 +258,7 @@ class _HomePageState extends State<HomePage> {
                   );
                 }
 
-                // Apply filtering: active only, optional search
+                // Apply filtering: active only, optional search (title, description, brand)
                 final searchQuery = _searchController.text.trim().toLowerCase();
                 var filteredDocs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
@@ -265,7 +266,11 @@ class _HomePageState extends State<HomePage> {
                   if (state != 'ACTIVE') return false;
                   if (searchQuery.isNotEmpty) {
                     final title = (data['title'] as String? ?? '').toLowerCase();
-                    if (!title.contains(searchQuery)) return false;
+                    final desc = (data['description'] as String? ?? '').toLowerCase();
+                    final brand = effectiveBrandDisplay(data).toLowerCase();
+                    if (!title.contains(searchQuery) &&
+                        !desc.contains(searchQuery) &&
+                        !brand.contains(searchQuery)) return false;
                   }
                   return true;
                 }).toList();
@@ -717,6 +722,8 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
   final _adminSettings = AdminSettingsService();
   List<Subcategory> _subcategories = [];
   String? _selectedSubcategoryId; // null = All
+  List<WatchBrand> _watchBrands = [];
+  String? _selectedWatchBrandId; // null = All (when category is watches)
 
   @override
   void initState() {
@@ -727,7 +734,13 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
   Future<void> _loadSubcategories() async {
     try {
       final list = await _adminSettings.getSubcategories(widget.categoryGroupId);
-      if (mounted) setState(() => _subcategories = list);
+      final watchBrands = widget.categoryGroupId == 'watches'
+          ? await _adminSettings.getWatchBrands()
+          : <WatchBrand>[];
+      if (mounted) setState(() {
+        _subcategories = list;
+        _watchBrands = watchBrands;
+      });
     } catch (_) {}
   }
 
@@ -784,6 +797,23 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                 ),
               ),
             ],
+            if (widget.categoryGroupId == 'watches' && _watchBrands.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: DropdownButtonFormField<String>(
+                  value: _selectedWatchBrandId,
+                  decoration: const InputDecoration(
+                    labelText: 'Brand',
+                    filled: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('All brands')),
+                    ..._watchBrands.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))),
+                  ],
+                  onChanged: (value) => setState(() => _selectedWatchBrandId = value),
+                ),
+              ),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: widget.auctionService.streamAllAuctions(limit: 50),
@@ -831,12 +861,24 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                   }
                   final groupId = widget.categoryGroupId;
                   final subId = _selectedSubcategoryId;
+                  final brandId = _selectedWatchBrandId;
                   final filteredDocs = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     final state = data['state'] as String? ?? 'UNKNOWN';
                     if (state != 'ACTIVE') return false;
                     if (effectiveCategoryGroup(data) != groupId) return false;
                     if (subId != null && effectiveSubcategory(data) != subId) return false;
+                    if (groupId == 'watches' && brandId != null) {
+                      final bid = data['brandId'] as String?;
+                      final b = data['brand'] as String?;
+                      final matchId = bid == brandId;
+                      String? selectedName;
+                      for (final w in _watchBrands) {
+                        if (w.id == brandId) { selectedName = w.name; break; }
+                      }
+                      final matchName = selectedName != null && b == selectedName;
+                      if (!matchId && !matchName) return false;
+                    }
                     return true;
                   }).toList();
                   filteredDocs.sort((a, b) {

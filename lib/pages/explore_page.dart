@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
 import '../models/category_model.dart';
+import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
 
 class ExplorePage extends StatefulWidget {
@@ -21,6 +22,8 @@ class _ExplorePageState extends State<ExplorePage> {
   String? _selectedCategoryGroupId; // null = All
   String? _selectedSubcategoryId;
   List<Subcategory> _subcategories = [];
+  List<WatchBrand> _watchBrands = [];
+  String? _selectedWatchBrandId; // null = All (when category is watches)
   String _selectedFilter = 'Active';
 
   @override
@@ -42,14 +45,19 @@ class _ExplorePageState extends State<ExplorePage> {
         _selectedCategoryGroupId = null;
         _selectedSubcategoryId = null;
         _subcategories = [];
+        _watchBrands = [];
+        _selectedWatchBrandId = null;
       });
       return;
     }
     final subs = await _adminSettings.getSubcategories(groupId);
+    final watchBrands = groupId == 'watches' ? await _adminSettings.getWatchBrands() : <WatchBrand>[];
     if (mounted) setState(() {
       _selectedCategoryGroupId = groupId;
       _subcategories = subs;
       _selectedSubcategoryId = null;
+      _watchBrands = watchBrands;
+      _selectedWatchBrandId = null;
     });
   }
 
@@ -249,6 +257,25 @@ class _ExplorePageState extends State<ExplorePage> {
                   ),
                 ),
               ),
+            if (_selectedCategoryGroupId == 'watches' && _watchBrands.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedWatchBrandId,
+                    decoration: const InputDecoration(
+                      labelText: 'Brand',
+                      filled: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('All brands')),
+                      ..._watchBrands.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name))),
+                    ],
+                    onChanged: (value) => setState(() => _selectedWatchBrandId = value),
+                  ),
+                ),
+              ),
             const SliverToBoxAdapter(
               child: SizedBox(height: 20),
             ),
@@ -371,10 +398,27 @@ class _ExplorePageState extends State<ExplorePage> {
                         effectiveSubcategory(data) != _selectedSubcategoryId) return false;
                   }
                   
-                  // Search filter
+                  // Brand filter (when category is watches)
+                  if (_selectedCategoryGroupId == 'watches' && _selectedWatchBrandId != null) {
+                    final bid = data['brandId'] as String?;
+                    final b = data['brand'] as String?;
+                    final matchId = bid == _selectedWatchBrandId;
+                    String? selectedName;
+                    for (final w in _watchBrands) {
+                      if (w.id == _selectedWatchBrandId) { selectedName = w.name; break; }
+                    }
+                    final matchName = selectedName != null && b == selectedName;
+                    if (!matchId && !matchName) return false;
+                  }
+                  
+                  // Search filter (title, description, brand)
                   if (searchQuery.isNotEmpty) {
                     final title = (data['title'] as String? ?? '').toLowerCase();
-                    if (!title.contains(searchQuery)) return false;
+                    final desc = (data['description'] as String? ?? '').toLowerCase();
+                    final brand = (effectiveBrandDisplay(data)).toLowerCase();
+                    if (!title.contains(searchQuery) &&
+                        !desc.contains(searchQuery) &&
+                        !brand.contains(searchQuery)) return false;
                   }
                   
                   return true;
