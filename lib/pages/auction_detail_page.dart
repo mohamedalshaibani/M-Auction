@@ -1959,57 +1959,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
       },
     );
   }
-}
-
-class CountdownText extends StatefulWidget {
-  final Timestamp? endsAt;
-
-  const CountdownText({super.key, required this.endsAt});
-
-  @override
-  State<CountdownText> createState() => _CountdownTextState();
-}
-
-class _CountdownTextState extends State<CountdownText> {
-  Timer? _ticker;
-
-  @override
-  void initState() {
-    super.initState();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
-  }
-
-  String _formatTimeLeft(Timestamp? endsAt) {
-    if (endsAt == null) return 'No end date';
-    final now = DateTime.now();
-    final endDate = endsAt.toDate();
-    final difference = endDate.difference(now);
-
-    if (difference.isNegative) return 'Ended';
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ${difference.inHours % 24}h ${difference.inMinutes % 60}m';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ${difference.inMinutes % 60}m';
-    } else {
-      return '${difference.inMinutes}m ${difference.inSeconds % 60}s';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      'Time left: ${_formatTimeLeft(widget.endsAt)}',
-      style: const TextStyle(fontWeight: FontWeight.bold),
-    );
-  }
 
   Widget _buildDraftAuctionUI(
     Map<String, dynamic> data,
@@ -2390,6 +2339,57 @@ class _CountdownTextState extends State<CountdownText> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class CountdownText extends StatefulWidget {
+  final Timestamp? endsAt;
+
+  const CountdownText({super.key, required this.endsAt});
+
+  @override
+  State<CountdownText> createState() => _CountdownTextState();
+}
+
+class _CountdownTextState extends State<CountdownText> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  String _formatTimeLeft(Timestamp? endsAt) {
+    if (endsAt == null) return 'No end date';
+    final now = DateTime.now();
+    final endDate = endsAt.toDate();
+    final difference = endDate.difference(now);
+
+    if (difference.isNegative) return 'Ended';
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ${difference.inHours % 24}h ${difference.inMinutes % 60}m';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ${difference.inMinutes % 60}m';
+    } else {
+      return '${difference.inMinutes}m ${difference.inSeconds % 60}s';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Time left: ${_formatTimeLeft(widget.endsAt)}',
+      style: const TextStyle(fontWeight: FontWeight.bold),
     );
   }
 }
