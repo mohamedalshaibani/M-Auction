@@ -190,19 +190,25 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      setState(() => _error = 'User not logged in');
+      if (mounted) {
+        setState(() => _error = 'User not logged in');
+      }
       return;
     }
 
     if (_selectedBrand == null || _selectedDurationDays == null) {
-      setState(() => _error = 'Please select brand and duration');
+      if (mounted) {
+        setState(() => _error = 'Please select brand and duration');
+      }
       return;
     }
 
-    setState(() {
-      _isSubmitting = true;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isSubmitting = true;
+        _error = null;
+      });
+    }
 
     try {
       final startPrice = double.parse(_startPriceController.text);

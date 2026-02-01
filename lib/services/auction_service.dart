@@ -70,9 +70,9 @@ class AuctionService {
     final data = auctionDoc.data() as Map<String, dynamic>;
     final state = data['state'] as String?;
 
-    // Verify state is DRAFT
-    if (state != 'DRAFT') {
-      throw Exception('Only DRAFT auctions can be submitted for approval');
+    // Verify state is DRAFT or PENDING_APPROVAL (allow resubmission)
+    if (state != 'DRAFT' && state != 'PENDING_APPROVAL') {
+      throw Exception('Only DRAFT or PENDING_APPROVAL auctions can be submitted');
     }
 
     // Validation: Required fields

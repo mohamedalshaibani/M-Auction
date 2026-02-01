@@ -1,5 +1,6 @@
 // Mobile implementation using WebView for Stripe Checkout
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -56,10 +57,14 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
-            setState(() => _isLoading = true);
+            if (mounted) {
+              setState(() => _isLoading = true);
+            }
           },
           onPageFinished: (String url) {
-            setState(() => _isLoading = false);
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint('WebView error: ${error.description}');
@@ -70,11 +75,13 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
 
   Future<void> _initializePayment() async {
     try {
-      setState(() {
-        _isInitializing = true;
-        _error = null;
-        _status = 'initializing';
-      });
+      if (mounted) {
+        setState(() {
+          _isInitializing = true;
+          _error = null;
+          _status = 'initializing';
+        });
+      }
 
       // Create PaymentIntent
       final result = await _paymentService.createPaymentIntent(
@@ -97,7 +104,9 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
       _startPaymentStatusListener();
 
       // Load Stripe Checkout in WebView
-      _loadStripeCheckout();
+      if (mounted) {
+        _loadStripeCheckout();
+      }
     } catch (e) {
       if (!mounted) return;
       
@@ -138,6 +147,21 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
     if (_clientSecret == null) return;
 
     final publishableKey = PaymentService.publishableKey;
+    
+    // Validate publishable key is available
+    if (publishableKey == null || publishableKey.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _error = 'Stripe publishable key is not configured';
+          _status = 'error';
+        });
+      }
+      return;
+    }
+    
+    // Properly encode values for safe JavaScript injection
+    final safePublishableKey = jsonEncode(publishableKey);
+    final safeClientSecret = jsonEncode(_clientSecret);
     
     // Create HTML page with Stripe Checkout
     final html = '''
@@ -236,9 +260,9 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
   </div>
 
   <script>
-    const stripe = Stripe('$publishableKey');
+    const stripe = Stripe($safePublishableKey);
     const elements = stripe.elements({
-      clientSecret: '$_clientSecret',
+      clientSecret: $safeClientSecret,
       appearance: {
         theme: 'stripe',
         variables: {
