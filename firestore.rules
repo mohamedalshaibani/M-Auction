@@ -159,8 +159,8 @@ service cloud.firestore {
     
     // Deposits collection
     match /deposits/{uid} {
-      // Users can read their own deposit doc
-      allow read: if isOwner(uid);
+      // Users can read their own deposit doc; admins can read all
+      allow read: if isOwner(uid) || isAdmin();
       
       // Writes controlled - MVP allows some controlled fields
       allow create, update: if isOwner(uid) && 
@@ -215,6 +215,20 @@ service cloud.firestore {
       
       // Writes only by backend (Cloud Functions) - block all client writes
       allow write: if false;
+    }
+    
+    // Platform revenue (admin only)
+    match /platformRevenue/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    
+    // Support chat: user's thread with support (supportChats/{userId}/messages)
+    match /supportChats/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+      match /messages/{messageId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
     }
     
     // Support tickets (contact form submissions)

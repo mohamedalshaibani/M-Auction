@@ -53,19 +53,21 @@ users/{uid}.role = "admin"
 Only users with `role == "admin"` can access the Admin Panel and perform admin actions.
 
 ### Testing data: 30 ACTIVE auctions
-To seed 30 ACTIVE auctions in Firestore for testing and experiments:
+To seed 30 ACTIVE auctions in Firestore so they appear in Home, Explore, and open correctly on Auction Detail:
 
-1. **Service account**: Create a Firebase service account key (Project settings → Service accounts → Generate new private key) and save it locally (e.g. `serviceAccountKey.json`). Do not commit this file.
+1. **Service account**: In [Firebase Console](https://console.firebase.google.com) → Project settings → Service accounts → **Generate new private key**. Save the JSON file (e.g. `serviceAccountKey.json`) in the project root. **Do not commit this file.**
 
-2. **Run the seed script** from the `functions` directory:
+2. **Run the seed script** from the **`functions`** directory (so `firebase-admin` is found):
    ```bash
    cd functions
    GOOGLE_APPLICATION_CREDENTIALS=../serviceAccountKey.json node scripts/seed_auctions.js
    ```
-   Or from project root:
+   Or use the npm script:
    ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json node functions/scripts/seed_auctions.js
+   cd functions
+   GOOGLE_APPLICATION_CREDENTIALS=../serviceAccountKey.json npm run seed-auctions
    ```
-   (Ensure `cd functions` first if you run from project root so `firebase-admin` is found, or run `npm run seed-auctions` from inside `functions` with `GOOGLE_APPLICATION_CREDENTIALS` set.)
 
-3. **Optional**: Set `SEED_SELLER_UID` to an existing user UID so seed auctions use that user as seller; otherwise the script uses the first user in the `users` collection or a placeholder.
+3. **Optional**: `SEED_SELLER_UID=someUserUid` — use an existing user UID as seller for all seed auctions; otherwise the script uses the first user in the `users` collection or a placeholder.
+
+4. **After seeding**: Restart or refresh the app. You should see 30 ACTIVE auctions in **Home** (carousel and categories) and **Explore**, and each item should open **Auction Detail** without errors. The seed creates 5 auctions per category (Watches, Bags, Fashion, Jewelry, Accessories, Collectibles) with 1–3 images each and future `endsAt` (mix of ending soon and later).
