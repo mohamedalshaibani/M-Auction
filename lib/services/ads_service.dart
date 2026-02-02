@@ -1,5 +1,7 @@
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 /// Partner ad / banner for home page. One banner per partner (dedupe by partnerId).
 class PartnerAd {
@@ -122,20 +124,42 @@ Future<void> deleteAd(String adId) async {
   await FirebaseFirestore.instance.collection('ads').doc(adId).delete();
 }
 
-/// Submit ad request (partners).
+/// Upload ad request attachment to Storage. Path: adRequests/{uid}/{fileName}
+Future<String> uploadAdRequestImage({
+  required String uid,
+  required String fileName,
+  required Uint8List bytes,
+  String contentType = 'image/jpeg',
+}) async {
+  final ref = FirebaseStorage.instance.ref('adRequests/$uid/$fileName');
+  final metadata = SettableMetadata(contentType: contentType);
+  await ref.putData(bytes, metadata);
+  return ref.getDownloadURL();
+}
+
+/// Submit ad request (partners). Requires authenticated user.
 Future<void> submitAdRequest({
   required String partnerName,
   required String contactEmail,
   String? company,
   String? message,
+  String? imageUrl,
+  String? preferredSize,
 }) async {
   final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    throw Exception(
+      'You must be signed in to submit an ad request. Please sign in and try again.',
+    );
+  }
   await FirebaseFirestore.instance.collection('adRequests').add({
     'partnerName': partnerName,
     'contactEmail': contactEmail,
     if (company != null && company.isNotEmpty) 'company': company,
     if (message != null && message.isNotEmpty) 'message': message,
-    'uid': user?.uid,
+    if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+    if (preferredSize != null && preferredSize.isNotEmpty) 'preferredSize': preferredSize,
+    'uid': user.uid,
     'status': 'pending',
     'createdAt': FieldValue.serverTimestamp(),
   });
