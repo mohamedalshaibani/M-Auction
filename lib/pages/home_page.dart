@@ -26,10 +26,13 @@ class _HomePageState extends State<HomePage> {
   final _searchFocusNode = FocusNode();
   final _auctionService = AuctionService();
   final _adminSettings = AdminSettingsService();
+  final PageController _adPageController = PageController();
   List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
   bool _searchExpanded = false;
   Map<String, int> _categoryCounts = {};
   StreamSubscription<QuerySnapshot>? _countsSubscription;
+  Timer? _adTimer;
+  int _adCount = 0;
 
   @override
   void initState() {
@@ -68,9 +71,28 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _countsSubscription?.cancel();
+    _adTimer?.cancel();
+    _adPageController.dispose();
     _searchFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _ensureAdTimer(int count) {
+    if (_adCount == count && _adTimer != null) return;
+    _adTimer?.cancel();
+    _adCount = count;
+    if (count <= 1) return;
+    _adTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted || !_adPageController.hasClients) return;
+      final current = _adPageController.page?.round() ?? 0;
+      final next = (current + 1) % count;
+      _adPageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    });
   }
 
   @override
@@ -327,9 +349,19 @@ class _HomePageState extends State<HomePage> {
                         );
                       }
                       final ads = snapshot.data!;
+                      _ensureAdTimer(ads.length);
                       return Column(
                         children: [
-                          ...ads.map((ad) => _PartnerBanner(ad: ad)),
+                          SizedBox(
+                            height: _kPartnerBannerHeight,
+                            child: PageView.builder(
+                              controller: _adPageController,
+                              itemCount: ads.length,
+                              itemBuilder: (context, index) {
+                                return _PartnerBanner(ad: ads[index]);
+                              },
+                            ),
+                          ),
                           const SizedBox(height: 24),
                         ],
                       );
@@ -431,9 +463,10 @@ class _CategoryTile extends StatelessWidget {
   }
 }
 
+const double _kPartnerBannerHeight = 110;
+
 /// Full-width partner banner (one per partner). Tappable if linkUrl set.
 class _PartnerBanner extends StatelessWidget {
-  static const double _bannerHeight = 72;
   final PartnerAd ad;
 
   const _PartnerBanner({required this.ad});
@@ -441,9 +474,13 @@ class _PartnerBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final useImage = ad.imageUrl.isNotEmpty;
+    final linkUrl = ad.linkUrl;
+    final displayUrl = linkUrl != null && linkUrl.isNotEmpty
+        ? (Uri.tryParse(linkUrl)?.host ?? linkUrl)
+        : 'Website';
     Widget child = Container(
       width: double.infinity,
-      height: _bannerHeight,
+      height: _kPartnerBannerHeight,
       decoration: BoxDecoration(
         color: AppTheme.backgroundGrey,
         border: Border(
@@ -451,21 +488,61 @@ class _PartnerBanner extends StatelessWidget {
           bottom: BorderSide(color: AppTheme.border),
         ),
       ),
-      child: useImage
-          ? Image.network(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (useImage)
+            Image.network(
               ad.imageUrl,
               fit: BoxFit.cover,
               width: double.infinity,
-              height: _bannerHeight,
+              height: _kPartnerBannerHeight,
               errorBuilder: (_, __, ___) => Center(
                 child: Icon(Icons.campaign_outlined, size: 28, color: AppTheme.textTertiary),
               ),
             )
-          : Center(
+          else
+            Center(
               child: Icon(Icons.campaign_outlined, size: 28, color: AppTheme.textTertiary),
             ),
+          Positioned(
+            left: 14,
+            bottom: 12,
+            right: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ad.partnerName,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    displayUrl,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
-    final linkUrl = ad.linkUrl;
     if (linkUrl != null && linkUrl.isNotEmpty) {
       child = InkWell(
         onTap: () async {
