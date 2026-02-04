@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/contract_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 
 class TermsContractPage extends StatefulWidget {
   final String auctionId;
@@ -68,18 +69,7 @@ class _TermsContractPageState extends State<TermsContractPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Sale Agreement',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'Sale Agreement'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

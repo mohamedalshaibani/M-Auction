@@ -852,11 +852,21 @@ class AuctionService {
     return bothAccepted;
   }
 
-  // Stream active auctions
+  // Stream active auctions (no limit) — for admin/counts
   Stream<QuerySnapshot> streamActiveAuctions() {
     return _firestore
         .collection('auctions')
         .where('state', isEqualTo: 'ACTIVE')
+        .snapshots();
+  }
+
+  /// Stream ACTIVE auctions with limit. Use for Home/Explore/Category listing.
+  /// Single-field where('state') requires no composite index.
+  Stream<QuerySnapshot> streamActiveAuctionsWithLimit(int limit) {
+    return _firestore
+        .collection('auctions')
+        .where('state', isEqualTo: 'ACTIVE')
+        .limit(limit)
         .snapshots();
   }
 

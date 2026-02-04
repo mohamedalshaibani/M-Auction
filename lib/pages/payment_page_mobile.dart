@@ -8,6 +8,8 @@ import '../firebase_options.dart';
 import '../services/payment_service.dart';
 import '../services/admin_settings_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../widgets/unified_app_bar.dart';
 
 // Export as PaymentPageImpl for conditional imports
 class PaymentPageImpl extends StatefulWidget {
@@ -276,7 +278,7 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
   <div class="container">
     <div class="amount">
       <div class="amount-label">Amount Due</div>
-      <div class="amount-value">AED ${widget.amount.toStringAsFixed(2)}</div>
+      <div class="amount-value">AED ${formatMoney(widget.amount)}</div>
     </div>
     <form id="payment-form">
       <div id="payment-element"></div>
@@ -361,11 +363,7 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-      ),
+      appBar: UnifiedAppBar(title: widget.title),
       body: _buildBody(),
     );
   }

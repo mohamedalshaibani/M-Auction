@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/listing_eligibility_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 import 'email_verification_page.dart';
 import 'listing_terms_accept_page.dart';
 import 'sell_create_auction_page.dart';
@@ -56,18 +57,7 @@ class _ListingFlowGatePageState extends State<ListingFlowGatePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Create Auction',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'Create Auction'),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),

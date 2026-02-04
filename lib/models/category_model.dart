@@ -111,6 +111,11 @@ String effectiveCategoryGroup(Map<String, dynamic> data) {
   return legacyCategoryToGroup(legacy);
 }
 
+/// Normalized category group id for comparison (lowercase). Use when matching against seeded data.
+String effectiveCategoryGroupNormalized(Map<String, dynamic> data) {
+  return effectiveCategoryGroup(data).toLowerCase().trim();
+}
+
 /// Get effective subcategory from auction document (new field or legacy).
 String effectiveSubcategory(Map<String, dynamic> data) {
   final sub = data['subcategory'] as String?;

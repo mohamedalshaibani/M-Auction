@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:luxury_auction_app/widgets/unified_app_bar.dart';
 
 class AuthTestPage extends StatefulWidget {
   const AuthTestPage({super.key});
@@ -196,7 +197,7 @@ class _AuthTestPageState extends State<AuthTestPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Auth Test')),
+      appBar: const UnifiedAppBar(title: 'Auth Test'),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

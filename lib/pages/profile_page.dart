@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../widgets/header_logo.dart';
+import '../widgets/unified_app_bar.dart';
 import 'create_profile_page.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -10,7 +12,7 @@ class ProfilePage extends StatelessWidget {
   Future<void> _signOut(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     if (context.mounted) {
-      Navigator.of(context).pushReplacementNamed('/authGate');
+      Navigator.of(context).pushReplacementNamed('/home');
     }
   }
 
@@ -18,33 +20,48 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text('Not logged in')),
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundLight,
+        appBar: const UnifiedAppBar(title: 'Profile'),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.person_outline, size: 64, color: AppTheme.textTertiary),
+                const SizedBox(height: 16),
+                Text(
+                  'Sign in to access your profile',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/login'),
+                  child: const Text('Sign in'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Row(
+      appBar: UnifiedAppBar(
+        titleWidget: Row(
           children: [
-            SizedBox(
-              width: AppTheme.headerLogoWidth,
-              height: AppTheme.headerLogoHeight,
-              child: Image.asset(
-                AppTheme.logoAssetLight,
-                fit: BoxFit.contain,
-              ),
-            ),
+            const HeaderLogo(),
             const SizedBox(width: 12),
             Text(
               'Profile',
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
                   ),
             ),
           ],

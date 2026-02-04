@@ -2,46 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// M Auction Design System
-/// Luxury tech aesthetic - Professional, trustworthy, modern (2025/2026 style)
-/// Based on the brand logo with sophisticated blue palette
+/// Primary from logo dark tone; minimal secondary blue; white/light backgrounds
 class AppTheme {
-  // Luxury Color Palette - Very soft blue (light, clean, not overpowering)
-  // Primary: Very light premium blue (single source for all AppBars/headers)
-  static const Color primaryBlue = Color(0xFF93C5FD); // Very soft, light blue
-  static const Color primaryBlueDark = Color(0xFF60A5FA); // Slightly deeper variant
-  static const Color primaryBlueLight = Color(0xFFBFDBFE); // Lightest accent
+  // Primary brand color - used for buttons, active states, icons, key accents only
+  static const Color primaryBlue = Color(0xFF006AA6);
 
-  // Header logo - consistent size across all pages for clear visibility
-  static const double headerLogoWidth = 96;
-  static const double headerLogoHeight = 52;
+  // Minimal light blue - only for subtle backgrounds / disabled / secondary UI
+  static const Color primaryLight = Color(0xFFE8EEF4);
+
+  // Header logo - consistent size; use logo_light on dark header
+  static const double headerLogoWidth = 112;
+  static const double headerLogoHeight = 60;
   static const String logoAssetLight = 'assets/branding/logo_light.png';
-  
-  // Secondary: Elegant blue-grey accent
-  static const Color secondaryBlue = Color(0xFF546E7A); // Sophisticated blue-grey
-  static const Color secondaryBlueDark = Color(0xFF37474F);
-  static const Color secondaryBlueLight = Color(0xFF78909C);
-  
-  // Soft Background colors (luxury - premium palette)
-  static const Color backgroundLight = Color(0xFFF7F8FA); // Soft background
-  static const Color backgroundGrey = Color(0xFFF5F5F5); // Very light grey
-  static const Color surface = Color(0xFFFFFFFF); // Pure white for cards/surfaces
-  static const Color surfaceElevated = Color(0xFFFFFFFF); // Elevated surfaces
-  
+  static const String logoAssetSource = 'assets/branding/logo_source.png';
+
+  // Backgrounds - white and very light grey (clean, premium)
+  static const Color backgroundLight = Color(0xFFFAFAFA);
+  static const Color backgroundGrey = Color(0xFFF5F5F5);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surfaceElevated = Color(0xFFFFFFFF);
+
   // Text colors
-  static const Color textPrimary = Color(0xFF1A1A1A); // Deep charcoal (softer than pure black)
-  static const Color textSecondary = Color(0xFF616161); // Medium grey
-  static const Color textTertiary = Color(0xFF9E9E9E); // Light grey
+  static const Color textPrimary = Color(0xFF1A1A1A);
+  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color textTertiary = Color(0xFF9CA3AF);
   static const Color textDisabled = Color(0xFFBDBDBD);
-  
-  // Semantic colors (refined for luxury feel)
-  static const Color success = Color(0xFF2E7D32); // Deeper, more professional green
-  static const Color error = Color(0xFFC62828); // Refined red
-  static const Color warning = Color(0xFFF57C00); // Warm orange
-  static const Color info = Color(0xFF93C5FD); // Matches primary
-  
-  // Border and divider (softer, more subtle)
-  static const Color border = Color(0xFFE8E8E8); // Softer border
-  static const Color divider = Color(0xFFE0E0E0); // Subtle divider
+
+  // Semantic colors
+  static const Color success = Color(0xFF2E7D32);
+  static const Color error = Color(0xFFC62828);
+  static const Color warning = Color(0xFFF57C00);
+  static const Color info = Color(0xFF006AA6); // Same as primary
+
+  // Borders and dividers - soft grey
+  static const Color border = Color(0xFFE5E7EB);
+  static const Color divider = Color(0xFFE5E7EB);
 
   /// Get the app theme
   static ThemeData get lightTheme {
@@ -51,16 +46,16 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       
-      // Color Scheme
+      // Color Scheme - primary from logo dark; minimal secondary blue
       colorScheme: ColorScheme.light(
         primary: primaryBlue,
         onPrimary: Colors.white,
-        primaryContainer: const Color(0xFFEFF6FF), // Very soft blue container
-        onPrimaryContainer: primaryBlueDark,
-        secondary: secondaryBlue,
+        primaryContainer: primaryLight,
+        onPrimaryContainer: textPrimary,
+        secondary: textSecondary,
         onSecondary: Colors.white,
-        secondaryContainer: secondaryBlueLight.withValues(alpha: 0.1),
-        onSecondaryContainer: secondaryBlueDark,
+        secondaryContainer: backgroundGrey,
+        onSecondaryContainer: textPrimary,
         error: error,
         onError: Colors.white,
         surface: surface,
@@ -72,21 +67,21 @@ class AppTheme {
       // Scaffold background (soft, luxury feel)
       scaffoldBackgroundColor: backgroundLight,
       
-      // AppBar Theme (elegant, minimal)
+      // AppBar Theme - white header, dark text and icons
       appBarTheme: AppBarTheme(
-        backgroundColor: primaryBlue,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: textPrimary,
         elevation: 0,
         centerTitle: false,
         surfaceTintColor: Colors.transparent,
         titleTextStyle: GoogleFonts.inter(
           fontSize: 20,
           fontWeight: FontWeight.w600,
-          color: Colors.white,
+          color: textPrimary,
           letterSpacing: -0.5,
         ),
         iconTheme: const IconThemeData(
-          color: Colors.white,
+          color: textPrimary,
           size: 24,
         ),
       ),
@@ -103,13 +98,13 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
       ),
       
-      // Button Themes (elegant, modern)
+      // Button Themes - same dark blue for primary actions
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
           elevation: 0,
-          shadowColor: primaryBlue.withValues(alpha: 0.2), // Soft colored shadow
+          shadowColor: Colors.black.withValues(alpha: 0.08),
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16), // Generous padding
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14), // Unified radius

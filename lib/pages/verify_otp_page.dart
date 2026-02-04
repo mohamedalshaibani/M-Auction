@@ -1,15 +1,18 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 
 class VerifyOtpPage extends StatefulWidget {
   final String verificationId;
   final String phoneNumber;
+  final String? returnAuctionId;
 
   const VerifyOtpPage({
     super.key,
     required this.verificationId,
     required this.phoneNumber,
+    this.returnAuctionId,
   });
 
   @override
@@ -48,9 +51,14 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
         smsCode: smsCode,
       );
       await FirebaseAuth.instance.signInWithCredential(cred);
-      
+
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/authGate');
+        if (widget.returnAuctionId != null) {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/authGate');
+        }
       }
     } on FirebaseAuthException catch (e) {
       debugPrint('FirebaseAuthException in signInWithCredential: ${e.code} - ${e.message}');
@@ -81,11 +89,18 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
     }
   }
 
+  void _onCancel() {
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Verify Code'),
+      appBar: UnifiedAppBar(
+        title: 'Verify Code',
+        leading: widget.returnAuctionId != null
+            ? IconButton(icon: const Icon(Icons.close), onPressed: _onCancel)
+            : null,
       ),
       body: SafeArea(
         child: Center(
@@ -104,7 +119,7 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
                       Center(
                         child: Image.asset(
                           'assets/branding/logo_light.png',
-                          width: 180,
+                          width: 212,
                           fit: BoxFit.contain,
                         ),
                       ),

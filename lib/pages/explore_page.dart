@@ -6,6 +6,9 @@ import '../services/admin_settings_service.dart';
 import '../models/category_model.dart';
 import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../widgets/header_logo.dart';
+import '../widgets/unified_app_bar.dart';
 import '../widgets/watch_brand_picker.dart';
 
 class ExplorePage extends StatefulWidget {
@@ -25,7 +28,7 @@ class _ExplorePageState extends State<ExplorePage> {
   List<Subcategory> _subcategories = [];
   List<WatchBrand> _watchBrands = [];
   String? _selectedWatchBrandId; // null = All (when category is watches)
-  String _selectedFilter = 'Active';
+  // Only active auctions are shown; ended auctions are hidden from Explore
 
   @override
   void initState() {
@@ -68,26 +71,6 @@ class _ExplorePageState extends State<ExplorePage> {
     super.dispose();
   }
 
-  String _formatTimeLeft(Timestamp? endsAt) {
-    if (endsAt == null) return 'No end date';
-    
-    final now = DateTime.now();
-    final endDate = endsAt.toDate();
-    final difference = endDate.difference(now);
-
-    if (difference.isNegative) {
-      return 'Ended';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}d ${difference.inHours % 24}h';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ${difference.inMinutes % 60}m';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m';
-    } else {
-      return 'Ending soon';
-    }
-  }
-
   bool _isEndedState(String state) {
     return state == 'ENDED' || state == 'ENDED_NO_RESPONSE';
   }
@@ -95,18 +78,7 @@ class _ExplorePageState extends State<ExplorePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        title: SizedBox(
-          width: AppTheme.headerLogoWidth,
-          height: AppTheme.headerLogoHeight,
-          child: Image.asset(
-            AppTheme.logoAssetLight,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(titleWidget: HeaderLogo()),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -143,28 +115,6 @@ class _ExplorePageState extends State<ExplorePage> {
                           ),
                           style: Theme.of(context).textTheme.bodySmall,
                           onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppTheme.backgroundGrey,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _FilterToggle(
-                              label: 'Active',
-                              isSelected: _selectedFilter == 'Active',
-                              onTap: () => setState(() => _selectedFilter = 'Active'),
-                            ),
-                            _FilterToggle(
-                              label: 'Ended',
-                              isSelected: _selectedFilter == 'Ended',
-                              onTap: () => setState(() => _selectedFilter = 'Ended'),
-                            ),
-                          ],
                         ),
                       ),
                     ],
@@ -234,10 +184,10 @@ class _ExplorePageState extends State<ExplorePage> {
             // ——— Auction list (horizontal rows, scrollable) ———
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-              stream: _auctionService.streamAllAuctions(limit: 50),
+              stream: _auctionService.streamActiveAuctionsWithLimit(100),
               builder: (context, snapshot) {
                 if (kDebugMode) {
-                  debugPrint('ExplorePage: filter=$_selectedFilter, categoryGroup=$_selectedCategoryGroupId');
+                  debugPrint('ExplorePage: categoryGroup=$_selectedCategoryGroupId');
                 }
 
                 if (snapshot.hasError) {
@@ -261,7 +211,7 @@ class _ExplorePageState extends State<ExplorePage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${snapshot.error}',
+                            'Check your connection. If browsing without signing in, ensure Firestore rules allow public read for auctions.',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: AppTheme.textSecondary,
                                 ),
@@ -304,9 +254,7 @@ class _ExplorePageState extends State<ExplorePage> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            _selectedFilter == 'Active'
-                                ? 'No active auctions yet'
-                                : 'No ended auctions yet',
+                            'No active auctions yet',
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                   color: AppTheme.textSecondary,
                                 ),
@@ -317,22 +265,15 @@ class _ExplorePageState extends State<ExplorePage> {
                   );
                 }
 
-                // Apply filtering and sorting
+                // Apply filtering and sorting (stream already returns only ACTIVE)
                 final searchQuery = _searchController.text.trim().toLowerCase();
                 var filteredDocs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  final state = data['state'] as String? ?? 'UNKNOWN';
-                  
-                  // State filter
-                  if (_selectedFilter == 'Active') {
-                    if (state != 'ACTIVE') return false;
-                  } else {
-                    if (!_isEndedState(state)) return false;
-                  }
+                  if (!isAuctionOpenForPublicBrowsing(data)) return false;
                   
                   // Category filter (categoryGroup + optional subcategory)
                   if (_selectedCategoryGroupId != null) {
-                    if (effectiveCategoryGroup(data) != _selectedCategoryGroupId) return false;
+                    if (effectiveCategoryGroupNormalized(data) != _selectedCategoryGroupId!.toLowerCase()) return false;
                     if (_selectedSubcategoryId != null &&
                         effectiveSubcategory(data) != _selectedSubcategoryId) return false;
                   }
@@ -363,22 +304,16 @@ class _ExplorePageState extends State<ExplorePage> {
                   return true;
                 }).toList();
 
-                // Sort
+                // Sort: ending soonest first
                 filteredDocs.sort((a, b) {
                   final aData = a.data() as Map<String, dynamic>;
                   final bData = b.data() as Map<String, dynamic>;
                   final aEndsAt = aData['endsAt'] as Timestamp?;
                   final bEndsAt = bData['endsAt'] as Timestamp?;
-
                   if (aEndsAt == null && bEndsAt == null) return 0;
                   if (aEndsAt == null) return 1;
                   if (bEndsAt == null) return -1;
-
-                  if (_selectedFilter == 'Active') {
-                    return aEndsAt.compareTo(bEndsAt);
-                  } else {
-                    return bEndsAt.compareTo(aEndsAt);
-                  }
+                  return aEndsAt.compareTo(bEndsAt);
                 });
 
                 if (filteredDocs.isEmpty) {
@@ -440,7 +375,7 @@ class _ExplorePageState extends State<ExplorePage> {
                         auctionId: auctionId,
                         title: title,
                         currentPrice: currentPrice,
-                        timeLeft: _formatTimeLeft(endsAt),
+                        timeLeft: formatTimeLeftCompact(endsAt),
                         isEnded: isEnded,
                         imageUrl: imageUrl,
                       ),
@@ -701,7 +636,7 @@ class _ExploreRowCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'AED ${currentPrice.toStringAsFixed(0)}',
+                      'AED ${formatMoney(currentPrice)}',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             color: AppTheme.primaryBlue,
                             fontWeight: FontWeight.w600,
@@ -892,7 +827,7 @@ class _ExploreGridCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   // Price
                   Text(
-                    'AED ${currentPrice.toStringAsFixed(0)}',
+                    'AED ${formatMoney(currentPrice)}',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           color: AppTheme.primaryBlue,
                           fontWeight: FontWeight.bold,

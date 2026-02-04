@@ -17,6 +17,8 @@ import 'pages/admin_panel_page.dart';
 import 'pages/wallet_page.dart';
 import 'pages/kyc_page.dart';
 import 'pages/my_won_auctions_page.dart';
+import 'pages/email_verification_page.dart';
+import 'pages/listing_terms_accept_page.dart';
 import 'services/payment_service.dart';
 import 'services/admin_settings_service.dart';
 
@@ -56,12 +58,24 @@ class MyApp extends StatelessWidget {
       routes: {
         '/splash': (context) => const SplashScreen(),
         '/authGate': (context) => const AuthGate(),
-        '/login': (context) => const LoginPhonePage(),
+        '/login': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments is Map
+              ? ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>
+              : null;
+          final returnAuctionId = args?['returnAuctionId'] as String?;
+          return LoginPhonePage(returnAuctionId: returnAuctionId);
+        },
         '/verifyOtp': (context) => const VerifyOtpPage(
               verificationId: '',
               phoneNumber: '',
             ),
-        '/createProfile': (context) => const CreateProfilePage(),
+        '/createProfile': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments is Map
+              ? ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>
+              : null;
+          final returnAuctionId = args?['returnAuctionId'] as String?;
+          return CreateProfilePage(returnAuctionId: returnAuctionId);
+        },
         '/home': (context) => const MainShell(),
         '/explore': (context) => const ExplorePage(),
         '/sellCreateAuction': (context) => const ListingFlowGatePage(),
@@ -70,9 +84,28 @@ class MyApp extends StatelessWidget {
           // Route protection - AdminPanelPage will check admin status internally
           return const AdminPanelPage();
         },
-        '/wallet': (context) => const WalletPage(),
-        '/kyc': (context) => const KycPage(),
+        '/wallet': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments is Map
+              ? ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>
+              : null;
+          final returnAuctionId = args?['returnAuctionId'] as String?;
+          return WalletPage(returnAuctionId: returnAuctionId);
+        },
+        '/kyc': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments is Map
+              ? ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>
+              : null;
+          final returnAuctionId = args?['returnAuctionId'] as String?;
+          return KycPage(returnAuctionId: returnAuctionId);
+        },
         '/myWins': (context) => const MyWonAuctionsPage(),
+        '/acceptTerms': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments is Map
+              ? ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>
+              : null;
+          final returnAuctionId = args?['returnAuctionId'] as String?;
+          return ListingTermsAcceptPage(returnAfterAccept: true, returnAuctionId: returnAuctionId);
+        },
       },
       onGenerateRoute: (settings) {
         final name = settings.name;
@@ -107,6 +140,22 @@ class MyApp extends StatelessWidget {
           return MaterialPageRoute(
             settings: settings,
             builder: (_) => AuctionDetailPage(auctionId: auctionId),
+          );
+        }
+
+        // Email verification (bidding flow: returnAfterVerify + optional returnAuctionId)
+        if (uri.path == '/emailVerification') {
+          final args = settings.arguments is Map
+              ? settings.arguments as Map<String, dynamic>
+              : (settings.arguments == true ? <String, dynamic>{} : null);
+          final returnAfterVerify = args != null ? (args['returnAfterVerify'] == true) : (settings.arguments == true);
+          final returnAuctionId = args?['returnAuctionId'] as String?;
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => EmailVerificationPage(
+              returnAfterVerify: returnAfterVerify,
+              returnAuctionId: returnAuctionId,
+            ),
           );
         }
 

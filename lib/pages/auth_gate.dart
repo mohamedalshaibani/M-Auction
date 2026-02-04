@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/unified_app_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/firestore_service.dart';
 import 'login_phone_page.dart';
@@ -33,7 +34,7 @@ class _AuthGateState extends State<AuthGate> {
         // Handle StreamBuilder errors
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Auth Error')),
+            appBar: const UnifiedAppBar(title: 'Auth Error'),
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -85,7 +86,7 @@ class _AuthGateState extends State<AuthGate> {
             // Handle FutureBuilder errors
             if (futureSnapshot.hasError) {
               return Scaffold(
-                appBar: AppBar(title: const Text('Profile Check Error')),
+                appBar: const UnifiedAppBar(title: 'Profile Check Error'),
                 body: Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),

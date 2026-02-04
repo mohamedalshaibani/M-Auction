@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 import '../services/listing_eligibility_service.dart';
 import 'listing_flow_gate_page.dart';
 
 /// Required step in listing flow: add and verify email (Firebase email link).
+/// When [returnAfterVerify] is true (e.g. from bidding flow), pop after verification instead of pushing ListingFlowGatePage.
 class EmailVerificationPage extends StatefulWidget {
-  const EmailVerificationPage({super.key});
+  const EmailVerificationPage({
+    super.key,
+    this.returnAfterVerify = false,
+    this.returnAuctionId,
+  });
+  final bool returnAfterVerify;
+  final String? returnAuctionId;
 
   @override
   State<EmailVerificationPage> createState() => _EmailVerificationPageState();
@@ -101,10 +109,19 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
       if (updated?.emailVerified == true) {
         await _eligibility.setEmailVerified(user.uid);
         if (!mounted) return;
-        Navigator.of(context).pop();
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const ListingFlowGatePage()),
-        );
+        if (widget.returnAfterVerify) {
+          if (widget.returnAuctionId != null) {
+            Navigator.of(context).popUntil((r) => r.isFirst);
+            Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+          } else {
+            Navigator.of(context).pop();
+          }
+        } else {
+          Navigator.of(context).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ListingFlowGatePage()),
+          );
+        }
       } else {
         setState(() => _error = 'Email not verified yet. Open the link we sent to ${updated?.email ?? _emailController.text} and try again.');
       }
@@ -113,20 +130,18 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     }
   }
 
+  void _onCancel() {
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Verify Email',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
+      appBar: UnifiedAppBar(
+        title: 'Verify Email',
+        leading: widget.returnAuctionId != null
+            ? IconButton(icon: const Icon(Icons.close), onPressed: _onCancel)
+            : null,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),

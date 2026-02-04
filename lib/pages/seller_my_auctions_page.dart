@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../widgets/unified_app_bar.dart';
 import 'payment_page.dart';
 
 class SellerMyAuctionsPage extends StatefulWidget {
@@ -139,18 +141,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'My Auctions',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'My Auctions'),
       body: StreamBuilder<QuerySnapshot>(
         stream: _auctionService.streamSellerAuctions(user.uid),
         builder: (context, snapshot) {
@@ -292,7 +283,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                               ),
                               const Spacer(),
                               Text(
-                                'AED ${currentPrice.toStringAsFixed(0)}',
+                                'AED ${formatMoney(currentPrice)}',
                                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                       color: AppTheme.textSecondary,
                                       fontWeight: FontWeight.w500,
@@ -338,7 +329,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
                               Row(
                                 children: [
                                   Text(
-                                    'Listing fee AED ${listingFeeAmount!.toStringAsFixed(2)}',
+                                    'Listing fee AED ${formatMoney(listingFeeAmount!)}',
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                           color: AppTheme.textSecondary,
                                         ),

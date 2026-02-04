@@ -2,10 +2,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 import 'verify_otp_page.dart';
 
 class LoginPhonePage extends StatefulWidget {
-  const LoginPhonePage({super.key});
+  const LoginPhonePage({super.key, this.returnAuctionId});
+
+  /// When set, show Cancel and return to this auction on cancel; pass to OTP/next steps.
+  final String? returnAuctionId;
 
   @override
   State<LoginPhonePage> createState() => _LoginPhonePageState();
@@ -26,6 +30,19 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
     super.dispose();
   }
 
+  void _navigateAfterLogin(BuildContext context) {
+    if (widget.returnAuctionId != null) {
+      Navigator.of(context).popUntil((r) => r.isFirst);
+      Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+    } else {
+      Navigator.of(context).pushReplacementNamed('/authGate');
+    }
+  }
+
+  void _onCancel() {
+    Navigator.of(context).pop();
+  }
+
   Future<void> _sendCode() async {
     if (!mounted) return;
 
@@ -38,8 +55,9 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
       _errorMessage = null;
     });
 
-    final phoneNumber = _phoneController.text.trim();
-    
+    final nationalNumber = _phoneController.text.trim().replaceAll(' ', '');
+    final phoneNumber = '+971$nationalNumber';
+
     try {
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: phoneNumber,
@@ -47,7 +65,7 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
           try {
             await FirebaseAuth.instance.signInWithCredential(cred);
             if (mounted) {
-              Navigator.of(context).pushReplacementNamed('/authGate');
+              _navigateAfterLogin(context);
             }
           } catch (e) {
             debugPrint('Error signing in with credential: $e');
@@ -87,6 +105,7 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
                 builder: (_) => VerifyOtpPage(
                   verificationId: verificationId,
                   phoneNumber: phoneNumber,
+                  returnAuctionId: widget.returnAuctionId,
                 ),
               ),
             );
@@ -134,6 +153,15 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: widget.returnAuctionId != null
+          ? UnifiedAppBar(
+              title: 'Sign In',
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _onCancel,
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -151,7 +179,7 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
                       Center(
                         child: Image.asset(
                           'assets/branding/logo_light.png',
-                          width: 180,
+                          width: 212,
                           fit: BoxFit.contain,
                         ),
                       ),
@@ -214,7 +242,7 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
                         enabled: !_isLoading,
                         decoration: InputDecoration(
                           labelText: 'Phone Number',
-                          hintText: '+971XXXXXXXXX',
+                          hintText: '50 123 4567',
                           prefixIcon: const Icon(Icons.phone_outlined),
                           prefixText: '+971 ',
                         ),

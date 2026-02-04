@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../widgets/unified_app_bar.dart';
 
 class MyWonAuctionsPage extends StatelessWidget {
   const MyWonAuctionsPage({super.key});
@@ -14,17 +16,7 @@ class MyWonAuctionsPage extends StatelessWidget {
 
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(
-          backgroundColor: AppTheme.primaryBlue,
-          foregroundColor: Colors.white,
-          title: Text(
-            'My Wins',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-          ),
-        ),
+        appBar: const UnifiedAppBar(title: 'My Wins'),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -50,18 +42,7 @@ class MyWonAuctionsPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'My Wins',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'My Wins'),
       body: StreamBuilder<QuerySnapshot>(
         stream: auctionService.streamWonAuctions(user.uid),
         builder: (context, snapshot) {
@@ -169,7 +150,7 @@ class MyWonAuctionsPage extends StatelessWidget {
                     children: [
                       const SizedBox(height: 8),
                       Text(
-                        'Price: AED ${currentPrice.toStringAsFixed(2)}',
+                        'Price: AED ${formatMoney(currentPrice)}',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),

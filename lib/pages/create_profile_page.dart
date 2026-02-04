@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 
 class CreateProfilePage extends StatefulWidget {
-  const CreateProfilePage({super.key});
+  const CreateProfilePage({super.key, this.returnAuctionId});
+
+  final String? returnAuctionId;
 
   @override
   State<CreateProfilePage> createState() => _CreateProfilePageState();
@@ -51,8 +54,12 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
       );
 
       if (mounted) {
-        // Navigate to main shell after profile creation
-        Navigator.of(context).pushReplacementNamed('/home');
+        if (widget.returnAuctionId != null) {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -64,9 +71,22 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
     }
   }
 
+  void _onCancel() {
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: widget.returnAuctionId != null
+          ? UnifiedAppBar(
+              title: 'Create Profile',
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _onCancel,
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -84,7 +104,7 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                       Center(
                         child: Image.asset(
                           'assets/branding/logo_light.png',
-                          width: 180,
+                          width: 212,
                           fit: BoxFit.contain,
                         ),
                       ),

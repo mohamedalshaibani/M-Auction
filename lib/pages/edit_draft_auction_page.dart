@@ -7,6 +7,7 @@ import '../models/category_model.dart';
 import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
 import '../widgets/auction_image_uploader.dart';
+import '../widgets/unified_app_bar.dart';
 import '../widgets/watch_brand_picker.dart';
 
 class EditDraftAuctionPage extends StatefulWidget {
@@ -407,14 +408,14 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
   Widget build(BuildContext context) {
     if (_isLoadingData) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Edit Auction')),
+        appBar: const UnifiedAppBar(title: 'Edit Auction'),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_error != null && _bagBrands.isEmpty && _watchBrands.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Edit Auction')),
+        appBar: const UnifiedAppBar(title: 'Edit Auction'),
         body: Center(child: Text(_error!)),
       );
     }
@@ -423,18 +424,7 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
     final isWatches = _selectedCategoryGroupId == 'watches';
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Edit Auction',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'Edit Auction'),
       body: Form(
         key: _formKey,
         child: ListView(

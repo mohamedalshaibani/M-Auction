@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 
 /// Live Chat: direct conversation between customer and all admins (multi-admin).
 /// Thread stored in supportChats/{userId}/messages.
@@ -68,28 +69,14 @@ class _LiveChatPageState extends State<LiveChatPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(
-          backgroundColor: AppTheme.primaryBlue,
-          title: const Text('Live Chat'),
-        ),
+        appBar: const UnifiedAppBar(title: 'Live Chat'),
         body: const Center(child: Text('Please sign in to use Live Chat')),
       );
     }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Live Chat',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'Live Chat'),
       body: Column(
         children: [
           Expanded(

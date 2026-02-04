@@ -3,9 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../widgets/unified_app_bar.dart';
 
 class WalletPage extends StatefulWidget {
-  const WalletPage({super.key});
+  const WalletPage({super.key, this.returnAuctionId});
+
+  final String? returnAuctionId;
 
   @override
   State<WalletPage> createState() => _WalletPageState();
@@ -115,24 +119,54 @@ class _WalletPageState extends State<WalletPage> {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Scaffold(
-        body: Center(child: Text('Not logged in')),
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundLight,
+        appBar: UnifiedAppBar(
+          title: 'Wallet',
+          leading: widget.returnAuctionId != null
+              ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                )
+              : null,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.account_balance_wallet_outlined, size: 64, color: AppTheme.textTertiary),
+                const SizedBox(height: 16),
+                Text(
+                  'Sign in to access your wallet',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/login'),
+                  child: const Text('Sign in'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Wallet',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
+      appBar: UnifiedAppBar(
+        title: 'Wallet',
+        leading: widget.returnAuctionId != null
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: _firestoreService.streamWallet(user.uid),
@@ -266,7 +300,7 @@ class _WalletPageState extends State<WalletPage> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'AED ${availableDeposit.toStringAsFixed(2)}',
+                          'AED ${formatMoney(availableDeposit)}',
                           style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                                 color: AppTheme.success,
                                 fontWeight: FontWeight.bold,

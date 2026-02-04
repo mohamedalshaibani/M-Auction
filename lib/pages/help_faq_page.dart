@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 
 /// Static FAQ entries (used when Firestore is empty or fails).
 final List<Map<String, String>> _staticFaq = [
@@ -51,18 +52,7 @@ class _HelpFaqPageState extends State<HelpFaqPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Help & FAQ',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'Help & FAQ'),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

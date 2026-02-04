@@ -2,13 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 import '../services/listing_eligibility_service.dart';
 import 'terms_conditions_page.dart';
 import 'sell_create_auction_page.dart';
 
 /// Terms acceptance step in listing flow. User must accept before entering listing details.
+/// When [returnAfterAccept] is true (e.g. from bidding flow), pop after accept instead of going to SellCreateAuctionPage.
 class ListingTermsAcceptPage extends StatefulWidget {
-  const ListingTermsAcceptPage({super.key});
+  const ListingTermsAcceptPage({
+    super.key,
+    this.returnAfterAccept = false,
+    this.returnAuctionId,
+  });
+  final bool returnAfterAccept;
+  final String? returnAuctionId;
 
   @override
   State<ListingTermsAcceptPage> createState() => _ListingTermsAcceptPageState();
@@ -57,9 +65,18 @@ class _ListingTermsAcceptPageState extends State<ListingTermsAcceptPage> {
     try {
       await _eligibility.setTermsAccepted(user.uid);
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => const SellCreateAuctionPage()),
-      );
+      if (widget.returnAfterAccept) {
+        if (widget.returnAuctionId != null) {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+        } else {
+          Navigator.of(context).pop();
+        }
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(builder: (_) => const SellCreateAuctionPage()),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -70,20 +87,18 @@ class _ListingTermsAcceptPageState extends State<ListingTermsAcceptPage> {
     }
   }
 
+  void _onCancel() {
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Auction Terms & Conditions',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
+      appBar: UnifiedAppBar(
+        title: 'Auction Terms & Conditions',
+        leading: widget.returnAuctionId != null
+            ? IconButton(icon: const Icon(Icons.close), onPressed: _onCancel)
+            : null,
       ),
       body: Column(
         children: [

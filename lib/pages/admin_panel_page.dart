@@ -8,6 +8,8 @@ import '../services/kyc_service.dart';
 import '../services/ads_service.dart';
 import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../widgets/unified_app_bar.dart';
 
 class AdminPanelPage extends StatefulWidget {
   const AdminPanelPage({super.key});
@@ -139,9 +141,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         
         if (!isAdmin || user == null) {
           return Scaffold(
-            appBar: AppBar(
-              title: const Text('Admin Panel'),
-            ),
+            appBar: const UnifiedAppBar(title: 'Admin Panel'),
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -166,8 +166,8 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         }
         
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Admin Panel'),
+          appBar: UnifiedAppBar(
+            title: 'Admin Panel',
             bottom: TabBar(
               controller: _tabController,
               tabs: const [
@@ -453,10 +453,10 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                             const SizedBox(height: 4),
                             Text('User ID: $uid'),
                             const SizedBox(height: 8),
-                            Text('Total Deposit: ${amount.toStringAsFixed(2)}'),
+                            Text('Total Deposit: ${formatMoney(amount)}'),
                             Text('Status: $status'),
-                            Text('Available: ${availableDeposit.toStringAsFixed(2)}'),
-                            Text('Locked: ${lockedDeposit.toStringAsFixed(2)}'),
+                            Text('Available: ${formatMoney(availableDeposit)}'),
+                            Text('Locked: ${formatMoney(lockedDeposit)}'),
                             if (vipWaived) ...[
                               const SizedBox(height: 8),
                               Container(
@@ -950,7 +950,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                           ),
                         ),
                         Text(
-                          'AED ${amount.toStringAsFixed(2)}',
+                          'AED ${formatMoney(amount)}',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: AppTheme.success,

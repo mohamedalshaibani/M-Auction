@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/payment_service.dart';
 import '../services/admin_settings_service.dart';
+import '../widgets/unified_app_bar.dart';
 
 // Export as PaymentPageImpl for conditional imports
 class PaymentPageImpl extends StatefulWidget {
@@ -259,7 +260,7 @@ class _PaymentPageWebState extends State<PaymentPageImpl> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: UnifiedAppBar(title: widget.title),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(

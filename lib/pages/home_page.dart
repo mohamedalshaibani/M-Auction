@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../widgets/header_logo.dart';
+import '../widgets/unified_app_bar.dart';
 import '../widgets/watch_brand_picker.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
@@ -50,13 +53,13 @@ class _HomePageState extends State<HomePage> {
 
   void _subscribeCategoryCounts() {
     _countsSubscription?.cancel();
-    _countsSubscription = _auctionService.streamAllAuctions(limit: 200).listen((snapshot) {
+    _countsSubscription = _auctionService.streamActiveAuctionsWithLimit(500).listen((snapshot) {
       if (!mounted) return;
       final counts = <String, int>{};
       for (final doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
-        if ((data['state'] as String? ?? '') != 'ACTIVE') continue;
-        final group = effectiveCategoryGroup(data);
+        if (!isAuctionOpenForPublicBrowsing(data)) continue;
+        final group = effectiveCategoryGroupNormalized(data);
         counts[group] = (counts[group] ?? 0) + 1;
       }
       setState(() => _categoryCounts = counts);
@@ -74,18 +77,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        title: SizedBox(
-          width: AppTheme.headerLogoWidth,
-          height: AppTheme.headerLogoHeight,
-          child: Image.asset(
-            AppTheme.logoAssetLight,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(titleWidget: HeaderLogo()),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -216,15 +208,23 @@ class _HomePageState extends State<HomePage> {
             // Horizontal carousel: Browse auctions
             SliverToBoxAdapter(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _auctionService.streamAllAuctions(limit: 30),
+                stream: _auctionService.streamActiveAuctionsWithLimit(30),
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      child: Text(
+                        'Unable to load auctions. Check your connection.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+                      ),
+                    );
+                  }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                     return const SizedBox.shrink();
                   }
-                  var docs = snapshot.data!.docs.where((d) {
-                    final s = (d.data() as Map<String, dynamic>)['state'] as String? ?? '';
-                    return s == 'ACTIVE';
-                  }).toList();
+                  var docs = snapshot.data!.docs
+                      .where((d) => isAuctionOpenForPublicBrowsing(d.data() as Map<String, dynamic>))
+                      .toList();
                   if (docs.isEmpty) return const SizedBox.shrink();
                   docs = List.from(docs)..shuffle();
                   final take = docs.take(12).toList();
@@ -243,7 +243,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       const SizedBox(height: 10),
                       SizedBox(
-                        height: 180,
+                        height: _kHomeCarouselTotalHeight,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -482,7 +482,13 @@ class _PartnerBanner extends StatelessWidget {
   }
 }
 
-/// Compact auction chip for home horizontal carousel.
+// Fixed dimensions for Browse auctions carousel cards (uniform height + center-crop)
+const double _kHomeCarouselCardWidth = 140;
+const double _kHomeCarouselImageHeight = 96; // Reduced to account for 2px border (1px top + 1px bottom)
+const double _kHomeCarouselTextHeight = 82; // total for title + price block  
+const double _kHomeCarouselTotalHeight = 180;
+
+/// Compact auction chip for home horizontal carousel. All sizes fixed to prevent overflow.
 class _HomeAuctionChip extends StatelessWidget {
   final String auctionId;
   final String title;
@@ -505,46 +511,78 @@ class _HomeAuctionChip extends StatelessWidget {
       child: InkWell(
         onTap: () => Navigator.pushNamed(context, '/auctionDetail?auctionId=$auctionId'),
         child: Container(
-          width: 140,
+          width: _kHomeCarouselCardWidth,
+          height: _kHomeCarouselTotalHeight,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppTheme.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                flex: 3,
-                child: imageUrl != null && imageUrl!.isNotEmpty
-                    ? Image.network(
-                        imageUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _ChipImagePlaceholder(),
-                      )
-                    : _ChipImagePlaceholder(),
+              // Image: fixed height, center-crop
+              SizedBox(
+                height: _kHomeCarouselImageHeight,
+                width: _kHomeCarouselCardWidth,
+                child: ClipRect(
+                  child: imageUrl != null && imageUrl!.isNotEmpty
+                      ? Image.network(
+                          imageUrl!,
+                          fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          width: _kHomeCarouselCardWidth,
+                          height: _kHomeCarouselImageHeight,
+                          errorBuilder: (_, __, ___) => _ChipImagePlaceholder(height: _kHomeCarouselImageHeight),
+                        )
+                      : _ChipImagePlaceholder(height: _kHomeCarouselImageHeight),
+                ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
+              // Text block: fixed height; clip so line-height/rounding never causes overflow
+              SizedBox(
+                height: _kHomeCarouselTextHeight,
+                child: ClipRect(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Title: max 2 lines (allow ~38px for line height)
+                        SizedBox(
+                          height: 38,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              title,
+                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'AED ${price.toStringAsFixed(0)}',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: AppTheme.primaryBlue,
-                            fontWeight: FontWeight.w600,
+                        ),
+                        const SizedBox(height: 2),
+                        // Price: single line
+                        SizedBox(
+                          height: 20,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'AED ${formatMoney(price)}',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: AppTheme.primaryBlue,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -556,11 +594,19 @@ class _HomeAuctionChip extends StatelessWidget {
 }
 
 class _ChipImagePlaceholder extends StatelessWidget {
+  const _ChipImagePlaceholder({this.height});
+
+  final double? height;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppTheme.backgroundGrey,
-      child: Center(child: Icon(Icons.image_outlined, size: 32, color: AppTheme.textTertiary)),
+    return SizedBox(
+      height: height,
+      width: height != null ? _kHomeCarouselCardWidth : null,
+      child: Container(
+        color: AppTheme.backgroundGrey,
+        child: Center(child: Icon(Icons.image_outlined, size: 32, color: AppTheme.textTertiary)),
+      ),
     );
   }
 }
@@ -711,22 +757,12 @@ class _AuctionCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   // Price row
-                  Row(
-                    children: [
-                      Text(
-                        'AED ',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                      ),
-                      Text(
-                        currentPrice.toStringAsFixed(0),
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              color: AppTheme.primaryBlue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                    ],
+                  Text(
+                    'AED ${formatMoney(currentPrice)}',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: AppTheme.primaryBlue,
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   const SizedBox(height: 12),
                   // Time/status row
@@ -860,18 +896,6 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
     } catch (_) {}
   }
 
-  String _formatTimeLeft(Timestamp? endsAt) {
-    if (endsAt == null) return 'No end date';
-    final now = DateTime.now();
-    final endDate = endsAt.toDate();
-    final difference = endDate.difference(now);
-    if (difference.isNegative) return 'Ended';
-    if (difference.inDays > 0) return '${difference.inDays}d ${difference.inHours % 24}h';
-    if (difference.inHours > 0) return '${difference.inHours}h ${difference.inMinutes % 60}m';
-    if (difference.inMinutes > 0) return '${difference.inMinutes}m';
-    return 'Ending soon';
-  }
-
   bool _isEndedState(String state) =>
       state == 'ENDED' || state == 'ENDED_NO_RESPONSE';
 
@@ -879,20 +903,11 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
+      appBar: UnifiedAppBar(
+        title: '${widget.categoryGroupName} Auctions',
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          '${widget.categoryGroupName} Auctions',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
         ),
       ),
       body: SafeArea(
@@ -945,7 +960,7 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
             ),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: widget.auctionService.streamAllAuctions(limit: 50),
+                stream: widget.auctionService.streamActiveAuctionsWithLimit(100),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(
@@ -962,6 +977,19 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                                     color: AppTheme.error,
                                   ),
                               textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Check your connection. If browsing without signing in, ensure Firestore rules allow public read for auctions.',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () => setState(() {}),
+                              child: const Text('Retry'),
                             ),
                           ],
                         ),
@@ -981,13 +1009,13 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                     return _CategoryEmptyState(categoryName: widget.categoryGroupName);
                   }
                   final groupId = widget.categoryGroupId;
+                  final groupIdNorm = groupId.toLowerCase();
                   final subId = _selectedSubcategoryId;
                   final brandId = _selectedWatchBrandId;
                   final filteredDocs = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
-                    final state = data['state'] as String? ?? 'UNKNOWN';
-                    if (state != 'ACTIVE') return false;
-                    if (effectiveCategoryGroup(data) != groupId) return false;
+                    if (!isAuctionOpenForPublicBrowsing(data)) return false;
+                    if (effectiveCategoryGroupNormalized(data) != groupIdNorm) return false;
                     if (subId != null && effectiveSubcategory(data) != subId) return false;
                     if (groupId == 'watches' && brandId != null) {
                       final bid = data['brandId'] as String?;
@@ -1040,7 +1068,7 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                         }
                       }
                       final isEnded = _isEndedState(state);
-                      final timeLeft = isEnded ? 'Ended' : _formatTimeLeft(endsAt);
+                      final timeLeft = isEnded ? 'Ended' : formatTimeLeftCompact(endsAt);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _CategoryListingRowCard(
@@ -1177,7 +1205,7 @@ class _CategoryListingRowCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'AED ${currentPrice.toStringAsFixed(0)}',
+                      'AED ${formatMoney(currentPrice)}',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             color: AppTheme.primaryBlue,
                             fontWeight: FontWeight.w600,

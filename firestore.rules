@@ -70,15 +70,17 @@ service cloud.firestore {
       // Users can read their own wallet, admins can read all
       allow read: if isOwner(uid) || isAdmin();
       
-      // Writes only through server/admin functions
-      allow write: if false; // Block all client writes - use Cloud Functions or admin SDK
+      // Create/delete only via server; owner can update reservedDeposit when placing bids
+      allow create, delete: if false;
+      allow update: if isOwner(uid) &&
+                      request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['reservedDeposit', 'updatedAt']);
     }
     
-    // Auctions collection
+    // Auctions collection — public read required for guest browsing (Home/Explore/Category lists)
     match /auctions/{auctionId} {
-      // Anyone authenticated can read auctions (list and get)
-      allow read: if request.auth != null;
-      
+      allow read: if true;
+
       // Create: Only seller can create DRAFT auctions, and sellerId must match auth.uid
       allow create: if request.auth != null &&
                       request.resource.data.sellerId == request.auth.uid &&
@@ -102,6 +104,11 @@ service cloud.firestore {
          (!('images' in request.resource.data.diff(resource.data).affectedKeys()) ||
           (request.resource.data.images is list &&
            request.resource.data.images.size() <= 6))) ||
+        // Bidder can update ACTIVE auction bid fields only (currentPrice, currentWinnerId, bidCount, endsAt)
+        (resource.data.state == 'ACTIVE' &&
+         request.resource.data.state == 'ACTIVE' &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['currentPrice', 'currentWinnerId', 'bidCount', 'endsAt'])) ||
         // Admin can approve/activate and change state
         isAdmin() ||
         // Seller can update delivery confirmation
@@ -128,9 +135,9 @@ service cloud.firestore {
       
       // Bids subcollection
       match /bids/{bidId} {
-        // Anyone authenticated can read bids (for all auction states)
-        allow read: if request.auth != null;
-        
+        // Public read for bid history display; create requires auth
+        allow read: if true;
+
         // Create bid: strict rules
         allow create: if request.auth != null &&
                         request.auth.uid == request.resource.data.bidderId &&

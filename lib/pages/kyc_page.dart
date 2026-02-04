@@ -6,10 +6,13 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import '../services/kyc_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 import 'dart:html' if (dart.library.io) '../web_stubs.dart' as html;
 
 class KycPage extends StatefulWidget {
-  const KycPage({super.key});
+  const KycPage({super.key, this.returnAuctionId});
+
+  final String? returnAuctionId;
 
   @override
   State<KycPage> createState() => _KycPageState();
@@ -205,7 +208,12 @@ class _KycPageState extends State<KycPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('KYC request submitted successfully')),
         );
-        Navigator.of(context).pop();
+        if (widget.returnAuctionId != null) {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+        } else {
+          Navigator.of(context).pop();
+        }
       }
     } catch (e) {
       setState(() {
@@ -246,20 +254,18 @@ class _KycPageState extends State<KycPage> {
     );
   }
 
+  void _onCancel() {
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'KYC Verification',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
+      appBar: UnifiedAppBar(
+        title: 'KYC Verification',
+        leading: widget.returnAuctionId != null
+            ? IconButton(icon: const Icon(Icons.close), onPressed: _onCancel)
+            : null,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

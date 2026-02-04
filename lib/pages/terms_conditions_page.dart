@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 
 /// Terms & Conditions: from Firestore content/terms or static fallback.
 /// Agreement step exists only during auction creation / listing flow, not here.
@@ -41,18 +42,7 @@ For questions about these terms, contact us via the Contact Us section in the ap
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Terms & Conditions',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'Terms & Conditions'),
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('content').doc('terms').get(),
         builder: (context, snapshot) {

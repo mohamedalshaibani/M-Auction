@@ -9,6 +9,7 @@ import '../models/watch_brand.dart';
 import '../widgets/auction_image_uploader.dart';
 import '../widgets/watch_brand_picker.dart';
 import '../theme/app_theme.dart';
+import '../widgets/unified_app_bar.dart';
 import 'listing_flow_gate_page.dart';
 
 class SellCreateAuctionPage extends StatefulWidget {
@@ -269,18 +270,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
     final isWatches = _selectedCategoryGroupId == 'watches';
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Create Auction',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-        ),
-      ),
+      appBar: const UnifiedAppBar(title: 'Create Auction'),
       body: Form(
         key: _formKey,
         child: ListView(

@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../models/category_model.dart';
 import '../models/watch_brand.dart';
 import '../services/auction_service.dart';
+import '../services/bid_eligibility_service.dart';
 import '../services/contract_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/format.dart';
+import '../widgets/unified_app_bar.dart';
 import 'terms_contract_page.dart';
 import 'payment_page.dart';
 import 'edit_draft_auction_page.dart';
+
+// Bidding card: uniform heights, padding, and corner radius for time pill, bid input, increment buttons
+const double _kBidCardRadius = 10.0;
+const EdgeInsets _kBidCardPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 10);
+const double _kBidCardControlHeight = 44.0;
 
 class AuctionDetailPage extends StatefulWidget {
   final String auctionId;
@@ -23,15 +31,76 @@ class AuctionDetailPage extends StatefulWidget {
 }
 
 class _AuctionDetailPageState extends State<AuctionDetailPage> {
-  final _bidController = TextEditingController();
   final AuctionService _auctionService = AuctionService();
   final ContractService _contractService = ContractService();
+  final BidEligibilityService _bidEligibility = BidEligibilityService();
   bool _isPlacingBid = false;
   bool _isProcessing = false;
   bool _isSubmitting = false;
   bool _isDeleting = false;
   String? _bidError;
-  Map<String, dynamic>? _depositCheck;
+  final _bidController = TextEditingController();
+  final FocusNode _bidFocusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _bidController.dispose();
+    _bidFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// Returns true if user can bid; otherwise shows message and routes to missing step, returns false.
+  Future<bool> _checkBidEligibilityAndRoute() async {
+    final result = await _bidEligibility.checkEligibility();
+    if (result.canBid) return true;
+    if (!mounted) return false;
+    final step = result.nextStep;
+    final message = result.message;
+    final nav = Navigator.of(context);
+    final args = <String, dynamic>{'returnAuctionId': widget.auctionId};
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Complete setup to bid'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              switch (step) {
+                case BidEligibilityStep.login:
+                  nav.pushNamed('/login', arguments: args);
+                  break;
+                case BidEligibilityStep.verifyEmail:
+                  nav.pushNamed('/emailVerification', arguments: {...args, 'returnAfterVerify': true});
+                  break;
+                case BidEligibilityStep.acceptTerms:
+                  nav.pushNamed('/acceptTerms', arguments: args);
+                  break;
+                case BidEligibilityStep.createProfile:
+                  nav.pushNamed('/createProfile', arguments: args);
+                  break;
+                case BidEligibilityStep.addDeposit:
+                  nav.pushNamed('/wallet', arguments: args);
+                  break;
+                case BidEligibilityStep.kyc:
+                  nav.pushNamed('/kyc', arguments: args);
+                  break;
+                case BidEligibilityStep.canBid:
+                  break;
+              }
+            },
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
 
   @override
   void initState() {
@@ -41,6 +110,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
   }
 
   void _setupContactReleaseListener() {
+    if (FirebaseAuth.instance.currentUser == null) return;
     // Listen for contract changes and automatically release contact when both accept
     _contractService.streamContract(widget.auctionId).listen((
       contractDoc,
@@ -82,33 +152,20 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
     });
   }
 
-  @override
-  void dispose() {
-    _bidController.dispose();
-    super.dispose();
-  }
-
   Future<void> _checkAndEndAuction() async {
     await _auctionService.checkAndEndAuction(widget.auctionId);
   }
 
-  Future<void> _checkDeposit(double price) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final check = await _auctionService.checkDepositRequirement(
-      bidderId: user.uid,
-      auctionPrice: price,
-      auctionId: widget.auctionId,
-    );
-
-    setState(() {
-      _depositCheck = Map<String, dynamic>.from(check)
-        ..['lastCheckedPrice'] = price;
-    });
+  Future<void> _placeBidWithAmount(double amount, double currentPrice, double minIncrement) async {
+    if (amount < currentPrice + minIncrement) {
+      setState(() => _bidError = 'Minimum bid: AED ${formatMoney(currentPrice + minIncrement)}');
+      return;
+    }
+    setState(() => _bidError = null);
+    await _placeBid(amount);
   }
 
-  Future<void> _placeBid() async {
+  Future<void> _placeBid(double amount) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       setState(() => _bidError = 'Not logged in');
@@ -146,12 +203,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
       return;
     }
 
-    final amount = double.tryParse(_bidController.text);
-    if (amount == null || amount <= 0) {
-      setState(() => _bidError = 'Invalid bid amount');
-      return;
-    }
-
     setState(() {
       _isPlacingBid = true;
       _bidError = null;
@@ -164,8 +215,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
         amount: amount,
       );
 
-      _bidController.clear();
       if (mounted) {
+        _bidController.clear();
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Bid placed successfully')),
         );
@@ -457,8 +509,8 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
       builder: (context, auctionSnapshot) {
         if (auctionSnapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(
-              title: const Text('Auction Details'),
+            appBar: UnifiedAppBar(
+              title: 'Auction Details',
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => Navigator.of(context).pop(),
@@ -470,8 +522,8 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
 
         if (auctionSnapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
-            appBar: AppBar(
-              title: const Text('Auction Details'),
+            appBar: UnifiedAppBar(
+              title: 'Auction Details',
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => Navigator.of(context).pop(),
@@ -483,8 +535,8 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
 
         if (!auctionSnapshot.hasData || !auctionSnapshot.data!.exists) {
           return Scaffold(
-            appBar: AppBar(
-              title: const Text('Auction Details'),
+            appBar: UnifiedAppBar(
+              title: 'Auction Details',
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => Navigator.of(context).pop(),
@@ -521,35 +573,11 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                     ? title
                     : shortId;
 
-          // Check deposit requirement for active auctions (recheck when price changes)
-          if (isActive && user != null && !isSeller) {
-            // Recheck deposit if price changed or not checked yet
-            if (_depositCheck == null) {
-              _checkDeposit(currentPrice);
-            } else {
-              // Recheck if current price differs from last checked
-              final lastCheckedPrice =
-                  _depositCheck!['lastCheckedPrice'] as double?;
-              if (lastCheckedPrice == null ||
-                  lastCheckedPrice != currentPrice) {
-                _checkDeposit(currentPrice);
-              }
-            }
-          }
-
         return Scaffold(
           backgroundColor: AppTheme.backgroundLight,
-          appBar: AppBar(
-            backgroundColor: AppTheme.primaryBlue,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            title: Text(
-              appBarTitle ?? 'Auction',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
+          resizeToAvoidBottomInset: false,
+          appBar: UnifiedAppBar(
+            title: appBarTitle ?? 'Auction',
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
@@ -607,10 +635,10 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                       ),
                                 ),
                               ),
-                              const SizedBox(height: 20),
-                              // Premium price / time / bids card
+                              const SizedBox(height: 16),
+                              // Price, time, and bid card
                               Container(
-                                padding: const EdgeInsets.all(20),
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   color: AppTheme.surface,
                                   borderRadius: BorderRadius.circular(14),
@@ -623,62 +651,194 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                     ),
                                   ],
                                 ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Current price',
-                                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                                  color: AppTheme.textSecondary,
-                                                ),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Current price',
+                                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                      color: AppTheme.textSecondary,
+                                                    ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'AED ${formatMoney(currentPrice)}',
+                                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                                      color: AppTheme.primaryBlue,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                '${data['bidCount'] ?? 0} bids',
+                                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                      color: AppTheme.textTertiary,
+                                                    ),
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            'AED ${currentPrice.toStringAsFixed(0)}',
-                                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                                  color: AppTheme.primaryBlue,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            '${data['bidCount'] ?? 0} bids',
-                                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                  color: AppTheme.textTertiary,
-                                                ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (isActive && endsAtTs != null)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.primaryBlue.withValues(alpha: 0.08),
-                                          borderRadius: BorderRadius.circular(14),
                                         ),
-                                        child: CountdownText(endsAt: endsAtTs),
-                                      )
-                                    else if (isEnded && winnerId != null)
-                                      Text(
-                                        'Ended',
-                                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                              color: AppTheme.error,
-                                              fontWeight: FontWeight.w600,
+                                        if (isActive && endsAtTs != null)
+                                          Container(
+                                            height: _kBidCardControlHeight,
+                                            padding: _kBidCardPadding,
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+                                              borderRadius: BorderRadius.circular(_kBidCardRadius),
                                             ),
+                                            alignment: Alignment.center,
+                                            child: CountdownText(endsAt: endsAtTs),
+                                          )
+                                        else if (isEnded && winnerId != null)
+                                          Text(
+                                            'Ended',
+                                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                                  color: AppTheme.error,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                          ),
+                                      ],
+                                    ),
+                                    // Place Bid UI shown to everyone; eligibility checked on tap (Place Bid / edit / increments)
+                                    if (isActive && !isSeller) ...[
+                                      const SizedBox(height: 12),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 12),
+                                      Builder(
+                                        builder: (context) {
+                                          final minIncrement = (data['minIncrement'] as num?)?.toDouble() ?? 50.0;
+                                          final minBid = currentPrice + minIncrement;
+                                          if (_bidController.text.isEmpty) {
+                                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                                              if (_bidController.text.isEmpty && mounted) {
+                                                _bidController.text = (minBid).round().toString();
+                                              }
+                                            });
+                                          }
+                                          return Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              TextField(
+                                                controller: _bidController,
+                                                focusNode: _bidFocusNode,
+                                                onTap: () async {
+                                                  final ok = await _checkBidEligibilityAndRoute();
+                                                  if (ok && mounted) {
+                                                    FocusScope.of(context).requestFocus(_bidFocusNode);
+                                                  }
+                                                },
+                                                decoration: InputDecoration(
+                                                  labelText: 'Your bid (AED)',
+                                                  hintText: formatMoney(minBid),
+                                                  isDense: true,
+                                                  contentPadding: _kBidCardPadding,
+                                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(_kBidCardRadius)),
+                                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(_kBidCardRadius)),
+                                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(_kBidCardRadius)),
+                                                  labelStyle: Theme.of(context).textTheme.bodySmall,
+                                                ),
+                                                keyboardType: TextInputType.number,
+                                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                                      color: AppTheme.primaryBlue,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: _BidIncrementChip(
+                                                      label: '+50',
+                                                      onTap: () {
+                                                        _checkBidEligibilityAndRoute().then((ok) {
+                                                          if (ok && mounted) {
+                                                            final raw = double.tryParse(_bidController.text.replaceAll(',', '')) ?? minBid;
+                                                            _bidController.text = (raw + 50).round().toString();
+                                                          }
+                                                        });
+                                                      },
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: _BidIncrementChip(
+                                                      label: '+100',
+                                                      onTap: () {
+                                                        _checkBidEligibilityAndRoute().then((ok) {
+                                                          if (ok && mounted) {
+                                                            final raw = double.tryParse(_bidController.text.replaceAll(',', '')) ?? minBid;
+                                                            _bidController.text = (raw + 100).round().toString();
+                                                          }
+                                                        });
+                                                      },
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: _BidIncrementChip(
+                                                      label: '+200',
+                                                      onTap: () {
+                                                        _checkBidEligibilityAndRoute().then((ok) {
+                                                          if (ok && mounted) {
+                                                            final raw = double.tryParse(_bidController.text.replaceAll(',', '')) ?? minBid;
+                                                            _bidController.text = (raw + 200).round().toString();
+                                                          }
+                                                        });
+                                                      },
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 10),
+                                              SizedBox(
+                                                width: double.infinity,
+                                                child: ElevatedButton(
+                                                  onPressed: _isPlacingBid
+                                                      ? null
+                                                      : () async {
+                                                          final ok = await _checkBidEligibilityAndRoute();
+                                                          if (ok && mounted) {
+                                                            final amount = double.tryParse(_bidController.text.replaceAll(',', ''));
+                                                            _placeBidWithAmount(amount ?? minBid, currentPrice, minIncrement);
+                                                          }
+                                                        },
+                                                  child: _isPlacingBid
+                                                      ? const SizedBox(
+                                                          width: 20,
+                                                          height: 20,
+                                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                                        )
+                                                      : const Text('Place Bid'),
+                                                ),
+                                              ),
+                                              if (_bidError != null) ...[
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  _bidError!,
+                                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.error),
+                                                ),
+                                              ],
+                                            ],
+                                          );
+                                        },
                                       ),
+                                    ],
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 16),
                               // Details: 2-column grid with dividers
                               Container(
-                                padding: const EdgeInsets.all(20),
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   color: AppTheme.surface,
                                   borderRadius: BorderRadius.circular(14),
@@ -745,193 +905,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                // Deposit requirement for active auctions
-                if (isActive &&
-                    !isSeller &&
-                    user != null &&
-                    _depositCheck != null) ...[
-                  const SizedBox(height: 24),
-                  Builder(
-                    builder: (context) {
-                      final required = _depositCheck!['required'] as double;
-                      final hasEnough = _depositCheck!['hasEnough'] as bool;
-                      final vipWaived = _depositCheck!['vipWaived'] as bool;
-                      final eligible =
-                          (_depositCheck!['eligible'] as num?)?.toDouble() ??
-                          0.0;
-                      final bidLimit =
-                          (_depositCheck!['bidLimit'] as num?)?.toDouble() ??
-                          0.0;
-
-                      if (vipWaived) {
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.success.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppTheme.success),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.check_circle, color: AppTheme.success),
-                              SizedBox(width: 8),
-                              Text('Deposit requirement waived (VIP)'),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: hasEnough
-                              ? AppTheme.success.withValues(alpha: 0.1)
-                              : AppTheme.warning.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: hasEnough ? AppTheme.success : AppTheme.warning,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  hasEnough
-                                      ? Icons.check_circle
-                                      : Icons.warning,
-                                  color: hasEnough
-                                      ? AppTheme.success
-                                      : AppTheme.warning,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Deposit Status',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Eligible Deposit: ${eligible.toStringAsFixed(2)}',
-                            ),
-                            Text(
-                              'Required for current bid: ${required.toStringAsFixed(2)}',
-                            ),
-                            if (bidLimit > 0) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                'Maximum Bid Limit: ${bidLimit.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.primaryBlue,
-                                ),
-                              ),
-                            ],
-                            if (!hasEnough) ...[
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.of(context).pushNamed('/wallet');
-                                  },
-                                  child: const Text('Add Deposit'),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ],
-                // Bidding UI for active auctions
-                if (isActive &&
-                    !isSeller &&
-                    user != null &&
-                    _depositCheck != null)
-                  Builder(
-                    builder: (context) {
-                      final vipWaived = _depositCheck!['vipWaived'] as bool;
-                      final hasEnough = _depositCheck!['hasEnough'] as bool;
-                      final bidLimit =
-                          (_depositCheck!['bidLimit'] as num?)?.toDouble() ??
-                          0.0;
-
-                      if (!(vipWaived || hasEnough)) {
-                        return const SizedBox.shrink();
-                      }
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 24),
-                          Text(
-                            'Place Bid:',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          if (bidLimit > 0 && !vipWaived) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Maximum bid: ${bidLimit.toStringAsFixed(2)} (based on available deposit)',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: AppTheme.primaryBlue),
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _bidController,
-                                  decoration: InputDecoration(
-                                    labelText: 'Bid Amount',
-                                    border: const OutlineInputBorder(),
-                                    helperText: bidLimit > 0 && !vipWaived
-                                        ? 'Max: ${bidLimit.toStringAsFixed(2)}'
-                                        : null,
-                                  ),
-                                  keyboardType: TextInputType.number,
-                                  onChanged: (value) {
-                                    // Recheck deposit when amount changes
-                                    final bidAmount = double.tryParse(value);
-                                    if (bidAmount != null &&
-                                        bidAmount > currentPrice) {
-                                      _checkDeposit(bidAmount);
-                                    }
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                onPressed: _isPlacingBid ? null : _placeBid,
-                                child: _isPlacingBid
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Text('Place Bid'),
-                              ),
-                            ],
-                          ),
-                          if (_bidError != null) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              _bidError!,
-                              style: const TextStyle(color: AppTheme.error),
-                            ),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
                 // Winner actions for ended auctions
                 // Winner section with step indicator
                 if (isEnded && isWinner && user != null) ...[
@@ -1062,10 +1035,10 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                     const SizedBox(height: 6),
                                     if (finalPrice != null)
                                       Text(
-                                        'Final Price: AED ${finalPrice.toStringAsFixed(2)}',
+                                        'Final Price: AED ${formatMoney(finalPrice)}',
                                       ),
                                     Text(
-                                      'Buyer Commission Due: AED ${buyerCommissionDue.toStringAsFixed(2)}',
+                                      'Buyer Commission Due: AED ${formatMoney(buyerCommissionDue)}',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: AppTheme.primaryBlue,
@@ -1151,7 +1124,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      'Commission Due: AED ${buyerCommissionDue.toStringAsFixed(2)}',
+                                      'Commission Due: AED ${formatMoney(buyerCommissionDue)}',
                                       style: const TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
@@ -1382,7 +1355,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      'Commission Due: AED ${sellerCommissionDue.toStringAsFixed(2)}',
+                                      'Commission Due: AED ${formatMoney(sellerCommissionDue)}',
                                       style: const TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
@@ -2104,7 +2077,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'AED ${amount.toStringAsFixed(2)}',
+                                  'AED ${formatMoney(amount)}',
                                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                         fontWeight: FontWeight.w600,
                                         color: AppTheme.textPrimary,
@@ -2367,7 +2340,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                 _buildDetailRow('Item ID', data['itemIdentifier'] as String? ?? 'Not set'),
                 _buildDetailRow(
                   'Start Price', 
-                  'AED ${((data['startPrice'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}',
+                  'AED ${formatMoney((data['startPrice'] as num?)?.toDouble() ?? 0.0)}',
                 ),
                 _buildDetailRow(
                   'Duration',
@@ -2615,6 +2588,40 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
   }
 }
 
+class _BidIncrementChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _BidIncrementChip({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _kBidCardControlHeight,
+      child: Material(
+        color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(_kBidCardRadius),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(_kBidCardRadius),
+          child: Padding(
+            padding: _kBidCardPadding,
+            child: Center(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: AppTheme.primaryBlue,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class CountdownText extends StatefulWidget {
   final Timestamp? endsAt;
 
@@ -2641,27 +2648,15 @@ class _CountdownTextState extends State<CountdownText> {
     super.dispose();
   }
 
-  String _formatTimeLeft(Timestamp? endsAt) {
-    if (endsAt == null) return 'No end date';
-    final now = DateTime.now();
-    final endDate = endsAt.toDate();
-    final difference = endDate.difference(now);
-
-    if (difference.isNegative) return 'Ended';
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ${difference.inHours % 24}h ${difference.inMinutes % 60}m';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ${difference.inMinutes % 60}m';
-    } else {
-      return '${difference.inMinutes}m ${difference.inSeconds % 60}s';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Text(
-      'Time left: ${_formatTimeLeft(widget.endsAt)}',
-      style: const TextStyle(fontWeight: FontWeight.bold),
+      formatTimeLeftCompact(widget.endsAt),
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: AppTheme.primaryBlue,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
     );
   }
 }
@@ -2763,7 +2758,7 @@ class _WinnerDeadlineCardState extends State<WinnerDeadlineCard> {
               if (widget.forfeitAmount != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Forfeit Amount: AED ${widget.forfeitAmount!.toStringAsFixed(2)}',
+                  'Forfeit Amount: AED ${formatMoney(widget.forfeitAmount!)}',
                   style: const TextStyle(fontSize: 14),
                 ),
               ],
@@ -2869,7 +2864,7 @@ class _WinnerDeadlineCardState extends State<WinnerDeadlineCard> {
               if (widget.depositHeld != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Held: AED ${widget.depositHeld!.toStringAsFixed(2)}',
+                  'Held: AED ${formatMoney(widget.depositHeld!)}',
                   style: const TextStyle(fontSize: 14),
                 ),
               ],
