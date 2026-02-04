@@ -628,7 +628,13 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            AppBar(title: const Text('ID Front')),
+                                            UnifiedAppBar(
+                                              title: 'ID Front',
+                                              leading: IconButton(
+                                                icon: const Icon(Icons.close),
+                                                onPressed: () => Navigator.of(context).pop(),
+                                              ),
+                                            ),
                                             Image.network(idFrontUrl, fit: BoxFit.contain),
                                           ],
                                         ),
@@ -659,7 +665,13 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            AppBar(title: const Text('ID Back')),
+                                            UnifiedAppBar(
+                                              title: 'ID Back',
+                                              leading: IconButton(
+                                                icon: const Icon(Icons.close),
+                                                onPressed: () => Navigator.of(context).pop(),
+                                              ),
+                                            ),
                                             Image.network(idBackUrl, fit: BoxFit.contain),
                                           ],
                                         ),
@@ -690,7 +702,13 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            AppBar(title: const Text('Selfie')),
+                                            UnifiedAppBar(
+                                              title: 'Selfie',
+                                              leading: IconButton(
+                                                icon: const Icon(Icons.close),
+                                                onPressed: () => Navigator.of(context).pop(),
+                                              ),
+                                            ),
                                             Image.network(selfieUrl, fit: BoxFit.contain),
                                           ],
                                         ),
@@ -721,7 +739,13 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            AppBar(title: const Text('Proof')),
+                                            UnifiedAppBar(
+                                              title: 'Proof',
+                                              leading: IconButton(
+                                                icon: const Icon(Icons.close),
+                                                onPressed: () => Navigator.of(context).pop(),
+                                              ),
+                                            ),
                                             Image.network(proofUrl, fit: BoxFit.contain),
                                           ],
                                         ),

@@ -1,5 +1,6 @@
 // Stub file - should not be used, but provides fallback
 import 'package:flutter/material.dart';
+import '../widgets/unified_app_bar.dart';
 
 class PaymentPageImpl extends StatelessWidget {
   final String type;
@@ -18,7 +19,7 @@ class PaymentPageImpl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: UnifiedAppBar(title: title),
       body: const Center(
         child: Text('Payment not available on this platform'),
       ),

@@ -14,6 +14,7 @@ import 'pages/sell_create_auction_page.dart';
 import 'pages/seller_my_auctions_page.dart';
 import 'pages/auction_detail_page.dart';
 import 'pages/admin_panel_page.dart';
+import 'widgets/unified_app_bar.dart';
 import 'pages/wallet_page.dart';
 import 'pages/kyc_page.dart';
 import 'pages/my_won_auctions_page.dart';
@@ -128,8 +129,15 @@ class MyApp extends StatelessWidget {
 
           return MaterialPageRoute(
             settings: settings,
-            builder: (_) => const Scaffold(
-              body: Center(child: Text('Invalid auction ID')),
+            builder: (context) => Scaffold(
+              appBar: UnifiedAppBar(
+                title: 'Auction',
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              body: const Center(child: Text('Invalid auction ID')),
             ),
           );
         }

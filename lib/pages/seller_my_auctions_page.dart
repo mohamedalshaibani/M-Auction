@@ -116,6 +116,7 @@ class _SellerMyAuctionsPageState extends State<SellerMyAuctionsPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       return Scaffold(
+        appBar: const UnifiedAppBar(title: 'My Auctions'),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

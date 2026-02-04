@@ -27,18 +27,20 @@ class UnifiedAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final appBarTheme = theme.appBarTheme;
     return AppBar(
       backgroundColor: Colors.white,
       foregroundColor: AppTheme.textPrimary,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
-      automaticallyImplyLeading: automaticallyImplyLeading,
+      automaticallyImplyLeading: leading != null ? false : automaticallyImplyLeading,
       leading: leading,
       title: titleWidget ?? (title != null
           ? Text(
               title!,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: AppTheme.textPrimary,
+              style: (appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge)?.copyWith(
+                    color: appBarTheme.foregroundColor ?? AppTheme.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
             )

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -41,12 +42,33 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
   String? _bidError;
   final _bidController = TextEditingController();
   final FocusNode _bidFocusNode = FocusNode();
+  final PageController _galleryController = PageController();
+  int _galleryIndex = 0;
 
   @override
   void dispose() {
+    _galleryController.dispose();
     _bidController.dispose();
     _bidFocusNode.dispose();
     super.dispose();
+  }
+
+  List<Map<String, dynamic>> _normalizeImages(List<dynamic>? images) {
+    final normalized = <Map<String, dynamic>>[];
+    if (images == null) return normalized;
+    for (final img in images) {
+      if (img is Map) {
+        final url = img['url'] as String? ?? '';
+        if (url.isEmpty) continue;
+        normalized.add({
+          'url': url,
+          'isPrimary': img['isPrimary'] == true,
+        });
+      } else if (img is String && img.isNotEmpty) {
+        normalized.add({'url': img, 'isPrimary': false});
+      }
+    }
+    return normalized;
   }
 
   /// Returns true if user can bid; otherwise shows message and routes to missing step, returns false.
@@ -796,6 +818,20 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                                       },
                                                     ),
                                                   ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: _BidIncrementChip(
+                                                      label: '+1000',
+                                                      onTap: () {
+                                                        _checkBidEligibilityAndRoute().then((ok) {
+                                                          if (ok && mounted) {
+                                                            final raw = double.tryParse(_bidController.text.replaceAll(',', '')) ?? minBid;
+                                                            _bidController.text = (raw + 1000).round().toString();
+                                                          }
+                                                        });
+                                                      },
+                                                    ),
+                                                  ),
                                                 ],
                                               ),
                                               const SizedBox(height: 10),
@@ -887,13 +923,21 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                       fontWeight: FontWeight.w600,
                                     ),
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                data['description'] as String? ?? 'No description',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: AppTheme.textPrimary,
-                                      height: 1.5,
-                                    ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppTheme.border),
+                                ),
+                                child: Text(
+                                  data['description'] as String? ?? 'No description',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: AppTheme.textPrimary,
+                                        height: 1.5,
+                                      ),
+                                ),
                               ),
                               const SizedBox(height: 24),
                             ],
@@ -1994,56 +2038,62 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                   ),
                 ],
                 const SizedBox(height: 24),
-                const Divider(height: 1),
-                const SizedBox(height: 20),
                 Text(
                   'Recent bids',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textSecondary,
-                        letterSpacing: 0.5,
                       ),
                 ),
                 const SizedBox(height: 12),
-                StreamBuilder<QuerySnapshot>(
-                  stream: _auctionService.streamBids(widget.auctionId),
-                  builder: (context, bidsSnapshot) {
-                    if (bidsSnapshot.hasError) {
-                      return Text(
-                        'Unable to load bids',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.error,
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: _auctionService.streamBids(widget.auctionId),
+                    builder: (context, bidsSnapshot) {
+                      if (bidsSnapshot.hasError) {
+                        return Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'Unable to load bids',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.error,
+                                ),
+                          ),
+                        );
+                      }
+
+                      if (bidsSnapshot.connectionState == ConnectionState.waiting) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                      );
-                    }
+                          ),
+                        );
+                      }
 
-                    if (bidsSnapshot.connectionState == ConnectionState.waiting) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Center(child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )),
-                      );
-                    }
+                      if (!bidsSnapshot.hasData || bidsSnapshot.data!.docs.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(
+                            'No bids yet',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: AppTheme.textTertiary,
+                                ),
+                          ),
+                        );
+                      }
 
-                    if (!bidsSnapshot.hasData ||
-                        bidsSnapshot.data!.docs.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        child: Text(
-                          'No bids yet',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.textTertiary,
-                              ),
-                        ),
-                      );
-                    }
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: ListView.separated(
+                      return ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: bidsSnapshot.data!.docs.length,
@@ -2093,10 +2143,11 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                             ),
                           );
                         },
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
+                const SizedBox(height: 24),
                           ],
                         ),
                       ),
@@ -2115,13 +2166,9 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
     String state,
   ) {
     final images = data['images'] as List<dynamic>?;
-    final hasImages = images != null && images.isNotEmpty;
-    final imagesWithUrl = images?.where((img) {
-      if (img is! Map<String, dynamic>) return false;
-      final url = img['url'] as String?;
-      return url != null && url.isNotEmpty;
-    }).toList();
-    final imageCount = imagesWithUrl?.length ?? 0;
+    final imagesWithUrl = _normalizeImages(images);
+    final hasImages = imagesWithUrl.isNotEmpty;
+    final imageCount = imagesWithUrl.length;
     final isPending = state == 'PENDING_APPROVAL';
 
     return Column(
@@ -2217,14 +2264,14 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                if (hasImages && imagesWithUrl!.isNotEmpty)
+                if (hasImages)
                   SizedBox(
                     height: 120,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: imagesWithUrl.length,
                       itemBuilder: (context, index) {
-                        final img = imagesWithUrl[index] as Map<String, dynamic>;
+                        final img = imagesWithUrl[index];
                         final url = img['url'] as String;
                         final isPrimary = img['isPrimary'] as bool? ?? false;
 
@@ -2468,16 +2515,11 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
   /// Full-width hero gallery (primary image first).
   Widget _buildImageGallery(BuildContext context, Map<String, dynamic> data) {
     final images = data['images'] as List<dynamic>?;
-    final hasImages = images != null && images.isNotEmpty;
-    final withUrl = images?.where((img) {
-      if (img is! Map<String, dynamic>) return false;
-      final url = img['url'] as String?;
-      return url != null && url.isNotEmpty;
-    }).toList() ?? <dynamic>[];
+    final withUrl = _normalizeImages(images);
     // Primary first
     withUrl.sort((a, b) {
-      final ap = (a as Map)['isPrimary'] == true ? 0 : 1;
-      final bp = (b as Map)['isPrimary'] == true ? 0 : 1;
+      final ap = a['isPrimary'] == true ? 0 : 1;
+      final bp = b['isPrimary'] == true ? 0 : 1;
       return ap.compareTo(bp);
     });
     if (withUrl.isEmpty) {
@@ -2492,27 +2534,74 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: SizedBox(
-        height: 280,
-        width: double.infinity,
-        child: PageView.builder(
-          itemCount: withUrl.length,
-          itemBuilder: (context, index) {
-            final img = withUrl[index] as Map<String, dynamic>;
-            final url = img['url'] as String? ?? '';
-            return Image.network(
-              url,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              errorBuilder: (_, __, ___) => Container(
-                color: AppTheme.backgroundGrey,
-                child: Center(
-                  child: Icon(Icons.broken_image_outlined, size: 48, color: AppTheme.textTertiary),
-                ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 280,
+            width: double.infinity,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragEnd: (details) {
+                if (withUrl.length < 2) return;
+                final velocity = details.primaryVelocity ?? 0.0;
+                if (velocity.abs() < 200) return;
+                final currentPage = _galleryController.page?.round() ?? _galleryIndex;
+                final nextPage = velocity < 0 ? currentPage + 1 : currentPage - 1;
+                if (nextPage < 0 || nextPage >= withUrl.length) return;
+                _galleryController.animateToPage(
+                  nextPage,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                );
+              },
+              child: PageView.builder(
+                controller: _galleryController,
+                physics: const NeverScrollableScrollPhysics(),
+                scrollDirection: Axis.horizontal,
+                allowImplicitScrolling: true,
+                itemCount: withUrl.length,
+                onPageChanged: (index) {
+                  if (!mounted) return;
+                  setState(() => _galleryIndex = index);
+                },
+                itemBuilder: (context, index) {
+                  final img = withUrl[index];
+                  final url = img['url'] as String? ?? '';
+                  return Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: AppTheme.backgroundGrey,
+                      child: Center(
+                        child: Icon(Icons.broken_image_outlined, size: 48, color: AppTheme.textTertiary),
+                      ),
+                    ),
+                  );
+                },
               ),
-            );
-          },
-        ),
+            ),
+          ),
+          if (withUrl.length > 1) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(withUrl.length, (index) {
+                final isActive = index == _galleryIndex;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: isActive ? 16 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isActive ? AppTheme.primaryBlue : AppTheme.border,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                );
+              }),
+            ),
+          ],
+        ],
       ),
     );
   }

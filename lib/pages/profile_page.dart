@@ -59,9 +59,8 @@ class ProfilePage extends StatelessWidget {
             const SizedBox(width: 12),
             Text(
               'Profile',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w600,
+              style: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(
+                    color: Theme.of(context).appBarTheme.foregroundColor ?? AppTheme.textPrimary,
                   ),
             ),
           ],
