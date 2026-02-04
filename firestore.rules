@@ -258,9 +258,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    // Ads (partner banners) - read by authenticated, write by admin
+    // Ads (partner banners) - public read, write by admin
     match /ads/{adId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow create, update, delete: if isAdmin();
     }
     

@@ -12,7 +12,6 @@ import '../services/admin_settings_service.dart';
 import '../services/ads_service.dart';
 import '../models/category_model.dart';
 import '../models/watch_brand.dart';
-import 'request_ad_page.dart';
 import 'listing_flow_gate_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -297,35 +296,35 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Partners',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                color: AppTheme.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => const RequestAdPage(),
-                            ),
+                    child: Text(
+                      'Partners',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
                           ),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Request an Ad'),
-                        ),
-                      ],
                     ),
                   ),
                   const SizedBox(height: 8),
                   StreamBuilder<List<PartnerAd>>(
                     stream: streamPartnerAdsOnePerPartner(),
                     builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          child: Text(
+                            'No ads available',
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
                       if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const SizedBox(height: 0);
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          child: Text(
+                            'No ads available',
+                            textAlign: TextAlign.center,
+                          ),
+                        );
                       }
                       final ads = snapshot.data!;
                       return Column(
