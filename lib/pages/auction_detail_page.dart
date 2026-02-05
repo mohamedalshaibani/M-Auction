@@ -41,17 +41,15 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
   String? _bidError;
   final _bidController = TextEditingController();
   final FocusNode _bidFocusNode = FocusNode();
-  final PageController _galleryController = PageController();
-  int _galleryIndex = 0;
 
   @override
   void dispose() {
-    _galleryController.dispose();
     _bidController.dispose();
     _bidFocusNode.dispose();
     super.dispose();
   }
 
+  /// Normalize images from Firestore (used by draft UI)
   List<Map<String, dynamic>> _normalizeImages(List<dynamic>? images) {
     final normalized = <Map<String, dynamic>>[];
     if (images == null) return normalized;
@@ -615,7 +613,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
                       // ——— Gallery (hero images) - OUTSIDE scrollable area ———
-                      _buildImageGallery(context, data),
+                      _ImageGallery(data: data),
                       // ——— Scrollable content ———
                       Expanded(
                         child: SingleChildScrollView(
@@ -940,15 +938,12 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                 ),
                               ),
                               const SizedBox(height: 24),
-                            ],
-                          ),
-                        ),
-                      const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                              const Divider(height: 1),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                 // Winner actions for ended auctions
                 // Winner section with step indicator
                 if (isEnded && isWinner && user != null) ...[
@@ -2151,10 +2146,14 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                               ],
                             ),
                           ),
+                    ],
                         ),
                       ),
+                      ),
+                    ),
                     ],
                   ),
+          ),
         );
       },
     );
@@ -2512,148 +2511,6 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
     );
   }
 
-  /// Full-width hero gallery (primary image first).
-  Widget _buildImageGallery(BuildContext context, Map<String, dynamic> data) {
-    final images = data['images'] as List<dynamic>?;
-    final withUrl = _normalizeImages(images);
-    // Primary first
-    withUrl.sort((a, b) {
-      final ap = a['isPrimary'] == true ? 0 : 1;
-      final bp = b['isPrimary'] == true ? 0 : 1;
-      return ap.compareTo(bp);
-    });
-    if (withUrl.isEmpty) {
-      return Container(
-        height: 220,
-        width: double.infinity,
-        color: AppTheme.backgroundGrey,
-        child: Center(
-          child: Icon(Icons.image_outlined, size: 48, color: AppTheme.textTertiary),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 280,
-            width: double.infinity,
-            child: Stack(
-              children: [
-                PageView.builder(
-                  controller: _galleryController,
-                  scrollDirection: Axis.horizontal,
-                  itemCount: withUrl.length,
-                  onPageChanged: (index) {
-                    if (!mounted) return;
-                    setState(() => _galleryIndex = index);
-                  },
-                  itemBuilder: (context, index) {
-                    final img = withUrl[index];
-                    final url = img['url'] as String? ?? '';
-                    return Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: AppTheme.backgroundGrey,
-                        child: Center(
-                          child: Icon(Icons.broken_image_outlined, size: 48, color: AppTheme.textTertiary),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                // Navigation arrows (only show if multiple images)
-                if (withUrl.length > 1) ...[
-                  // Left arrow
-                  if (_galleryIndex > 0)
-                    Positioned(
-                      left: 12,
-                      top: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: GestureDetector(
-                          onTap: () {
-                            _galleryController.previousPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeOut,
-                            );
-                          },
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.chevron_left,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  // Right arrow
-                  if (_galleryIndex < withUrl.length - 1)
-                    Positioned(
-                      right: 12,
-                      top: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: GestureDetector(
-                          onTap: () {
-                            _galleryController.nextPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeOut,
-                            );
-                          },
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.chevron_right,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ],
-            ),
-          ),
-          if (withUrl.length > 1) ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(withUrl.length, (index) {
-                final isActive = index == _galleryIndex;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: isActive ? 16 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: isActive ? AppTheme.primaryBlue : AppTheme.border,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                );
-              }),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 
   /// Two-column detail row with optional divider (premium layout).
   Widget _buildDetailRowWithDivider(String label, String value, {required bool isLast}) {
@@ -2720,6 +2577,195 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                   ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Isolated gallery widget to prevent parent rebuilds on swipe
+class _ImageGallery extends StatefulWidget {
+  final Map<String, dynamic> data;
+
+  const _ImageGallery({required this.data});
+
+  @override
+  State<_ImageGallery> createState() => _ImageGalleryState();
+}
+
+class _ImageGalleryState extends State<_ImageGallery> {
+  final PageController _controller = PageController();
+  int _currentIndex = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> _normalizeImages(List<dynamic>? images) {
+    final normalized = <Map<String, dynamic>>[];
+    if (images == null) return normalized;
+    for (final img in images) {
+      if (img is Map) {
+        final url = img['url'] as String? ?? '';
+        if (url.isEmpty) continue;
+        normalized.add({
+          'url': url,
+          'isPrimary': img['isPrimary'] == true,
+        });
+      } else if (img is String && img.isNotEmpty) {
+        normalized.add({'url': img, 'isPrimary': false});
+      }
+    }
+    return normalized;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final images = widget.data['images'] as List<dynamic>?;
+    final withUrl = _normalizeImages(images);
+    // Primary first
+    withUrl.sort((a, b) {
+      final ap = a['isPrimary'] == true ? 0 : 1;
+      final bp = b['isPrimary'] == true ? 0 : 1;
+      return ap.compareTo(bp);
+    });
+
+    if (withUrl.isEmpty) {
+      return Container(
+        height: 220,
+        width: double.infinity,
+        color: AppTheme.backgroundGrey,
+        child: const Center(
+          child: Icon(Icons.image_outlined, size: 48, color: AppTheme.textTertiary),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 280,
+            width: double.infinity,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                // Prevent scroll notifications from bubbling up
+                return true;
+              },
+              child: Stack(
+                children: [
+                  PageView.builder(
+                    controller: _controller,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: withUrl.length,
+                    onPageChanged: (index) {
+                      if (!mounted) return;
+                      setState(() => _currentIndex = index);
+                    },
+                    itemBuilder: (context, index) {
+                      final img = withUrl[index];
+                      final url = img['url'] as String? ?? '';
+                      return Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: AppTheme.backgroundGrey,
+                          child: const Center(
+                            child: Icon(Icons.broken_image_outlined,
+                                size: 48, color: AppTheme.textTertiary),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  // Navigation arrows
+                  if (withUrl.length > 1) ...[
+                    if (_currentIndex > 0)
+                      Positioned(
+                        left: 12,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () {
+                              _controller.previousPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            },
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.chevron_left,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_currentIndex < withUrl.length - 1)
+                      Positioned(
+                        right: 12,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () {
+                              _controller.nextPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            },
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.chevron_right,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          if (withUrl.length > 1) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(withUrl.length, (index) {
+                final isActive = index == _currentIndex;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: isActive ? 16 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isActive ? AppTheme.primaryBlue : AppTheme.border,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                );
+              }),
+            ),
+          ],
         ],
       ),
     );
