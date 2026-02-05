@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -607,24 +606,25 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
           ),
           body: SafeArea(
             top: false,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.zero,
-              child: isDraft
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      child: _buildDraftAuctionUI(data, isSeller, state),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        // ——— Gallery (hero images) ———
-                        _buildImageGallery(context, data),
-                        // ——— Content block: title → status → price card → details → description ———
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+            child: isDraft
+                ? SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    child: _buildDraftAuctionUI(data, isSeller, state),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      // ——— Gallery (hero images) - OUTSIDE scrollable area ———
+                      _buildImageGallery(context, data),
+                      // ——— Scrollable content ———
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.zero,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                               const SizedBox(height: 24),
                               // Title
                               Text(
@@ -2148,13 +2148,13 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                          ],
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-              ],
-            ),
-          ),
-          ),
+                    ],
+                  ),
         );
       },
     );
@@ -2539,47 +2539,96 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
           SizedBox(
             height: 280,
             width: double.infinity,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onHorizontalDragEnd: (details) {
-                if (withUrl.length < 2) return;
-                final velocity = details.primaryVelocity ?? 0.0;
-                if (velocity.abs() < 200) return;
-                final currentPage = _galleryController.page?.round() ?? _galleryIndex;
-                final nextPage = velocity < 0 ? currentPage + 1 : currentPage - 1;
-                if (nextPage < 0 || nextPage >= withUrl.length) return;
-                _galleryController.animateToPage(
-                  nextPage,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                );
-              },
-              child: PageView.builder(
-                controller: _galleryController,
-                physics: const NeverScrollableScrollPhysics(),
-                scrollDirection: Axis.horizontal,
-                allowImplicitScrolling: true,
-                itemCount: withUrl.length,
-                onPageChanged: (index) {
-                  if (!mounted) return;
-                  setState(() => _galleryIndex = index);
-                },
-                itemBuilder: (context, index) {
-                  final img = withUrl[index];
-                  final url = img['url'] as String? ?? '';
-                  return Image.network(
-                    url,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: AppTheme.backgroundGrey,
+            child: Stack(
+              children: [
+                PageView.builder(
+                  controller: _galleryController,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: withUrl.length,
+                  onPageChanged: (index) {
+                    if (!mounted) return;
+                    setState(() => _galleryIndex = index);
+                  },
+                  itemBuilder: (context, index) {
+                    final img = withUrl[index];
+                    final url = img['url'] as String? ?? '';
+                    return Image.network(
+                      url,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: AppTheme.backgroundGrey,
+                        child: Center(
+                          child: Icon(Icons.broken_image_outlined, size: 48, color: AppTheme.textTertiary),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Navigation arrows (only show if multiple images)
+                if (withUrl.length > 1) ...[
+                  // Left arrow
+                  if (_galleryIndex > 0)
+                    Positioned(
+                      left: 12,
+                      top: 0,
+                      bottom: 0,
                       child: Center(
-                        child: Icon(Icons.broken_image_outlined, size: 48, color: AppTheme.textTertiary),
+                        child: GestureDetector(
+                          onTap: () {
+                            _galleryController.previousPage(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOut,
+                            );
+                          },
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.chevron_left,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  );
-                },
-              ),
+                  // Right arrow
+                  if (_galleryIndex < withUrl.length - 1)
+                    Positioned(
+                      right: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: GestureDetector(
+                          onTap: () {
+                            _galleryController.nextPage(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOut,
+                            );
+                          },
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.chevron_right,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ],
             ),
           ),
           if (withUrl.length > 1) ...[

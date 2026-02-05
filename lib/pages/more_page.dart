@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
@@ -11,11 +12,37 @@ import 'live_chat_page.dart';
 import 'request_ad_page.dart';
 
 /// More / Settings hub: About, Contact, Terms, FAQ, Live Chat, Share App.
-class MorePage extends StatelessWidget {
+class MorePage extends StatefulWidget {
   const MorePage({super.key});
+
+  @override
+  State<MorePage> createState() => _MorePageState();
+}
+
+class _MorePageState extends State<MorePage> {
+  String _version = '—';
+  String _buildNumber = '—';
 
   static const String _appStoreUrl = 'https://apps.apple.com/app/id123456789'; // Placeholder
   static const String _shareText = 'Check out M Auction – premium auctions.';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _version = info.version;
+          _buildNumber = info.buildNumber;
+        });
+      }
+    } catch (_) {}
+  }
 
   Future<void> _shareApp(BuildContext context) async {
     const shareContent = '$_shareText $_appStoreUrl';
@@ -117,6 +144,16 @@ class MorePage extends StatelessWidget {
             subtitle: 'Share with friends',
             onTap: () => _shareApp(context),
           ),
+          const SizedBox(height: 28),
+          Center(
+            child: Text(
+              'Version $_version ($_buildNumber)',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+            ),
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );

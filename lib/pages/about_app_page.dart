@@ -1,37 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
 
 /// About App: overview, how it works, trust/safety, fees. No contact details.
-class AboutAppPage extends StatefulWidget {
+class AboutAppPage extends StatelessWidget {
   const AboutAppPage({super.key});
-
-  @override
-  State<AboutAppPage> createState() => _AboutAppPageState();
-}
-
-class _AboutAppPageState extends State<AboutAppPage> {
-  String _version = '—';
-  String _buildNumber = '—';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadVersion();
-  }
-
-  Future<void> _loadVersion() async {
-    try {
-      final info = await PackageInfo.fromPlatform();
-      if (mounted) {
-        setState(() {
-          _version = info.version;
-          _buildNumber = info.buildNumber;
-        });
-      }
-    } catch (_) {}
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,30 +18,13 @@ class _AboutAppPageState extends State<AboutAppPage> {
           children: [
             Center(
               child: SizedBox(
-                width: 80,
-                height: 80,
+                width: 120,
+                height: 120,
                 child: Image.asset(
                   AppTheme.logoAssetLight,
                   fit: BoxFit.contain,
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'M Auction',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Version $_version ($_buildNumber)',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
             ),
             const SizedBox(height: 32),
             _SectionCard(
