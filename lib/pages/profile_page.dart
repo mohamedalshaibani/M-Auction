@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../widgets/guest_sign_in_prompt.dart';
 import '../widgets/header_logo.dart';
 import '../widgets/unified_app_bar.dart';
 import 'create_profile_page.dart';
 
 class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({super.key, this.onNotNow});
+
+  /// When in MainShell as guest, called when user taps "Not now" (switch to Home).
+  final VoidCallback? onNotNow;
 
   Future<void> _signOut(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
@@ -23,29 +27,11 @@ class ProfilePage extends StatelessWidget {
       return Scaffold(
         backgroundColor: AppTheme.backgroundLight,
         appBar: const UnifiedAppBar(title: 'Profile'),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.person_outline, size: 64, color: AppTheme.textTertiary),
-                const SizedBox(height: 16),
-                Text(
-                  'Sign in to access your profile',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/login'),
-                  child: const Text('Sign in'),
-                ),
-              ],
-            ),
-          ),
+        body: GuestSignInPrompt(
+          title: 'Profile',
+          icon: Icons.person_outline,
+          onNotNow: onNotNow,
+          onContinue: () => Navigator.of(context).pushNamed('/login'),
         ),
       );
     }

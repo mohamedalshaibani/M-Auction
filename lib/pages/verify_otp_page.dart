@@ -1,18 +1,23 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
+import 'create_profile_page.dart';
+import 'listing_flow_gate_page.dart';
 
 class VerifyOtpPage extends StatefulWidget {
   final String verificationId;
   final String phoneNumber;
   final String? returnAuctionId;
+  final bool returnToListing;
 
   const VerifyOtpPage({
     super.key,
     required this.verificationId,
     required this.phoneNumber,
     this.returnAuctionId,
+    this.returnToListing = false,
   });
 
   @override
@@ -52,12 +57,34 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
       );
       await FirebaseAuth.instance.signInWithCredential(cred);
 
+      if (!mounted) return;
+      final firestore = FirestoreService();
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final userExists = await firestore.userExists(user.uid);
+
       if (mounted) {
-        if (widget.returnAuctionId != null) {
-          Navigator.of(context).popUntil((r) => r.isFirst);
-          Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+        if (userExists) {
+          if (widget.returnAuctionId != null) {
+            Navigator.of(context).popUntil((r) => r.isFirst);
+            Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+          } else if (widget.returnToListing) {
+            Navigator.of(context).popUntil((r) => r.isFirst);
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ListingFlowGatePage()),
+            );
+          } else {
+            Navigator.of(context).pushReplacementNamed('/authGate');
+          }
         } else {
-          Navigator.of(context).pushReplacementNamed('/authGate');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => CreateProfilePage(
+                returnAuctionId: widget.returnAuctionId,
+                returnToListing: widget.returnToListing,
+              ),
+            ),
+          );
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -90,15 +117,23 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
   }
 
   void _onCancel() {
-    Navigator.of(context).pop();
+    if (widget.returnAuctionId != null) {
+      Navigator.of(context).popUntil(
+          (Route<dynamic> r) => r.settings.name?.startsWith('/auctionDetail') == true);
+    } else if (widget.returnToListing) {
+      Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final showCancel = widget.returnAuctionId != null || widget.returnToListing;
     return Scaffold(
       appBar: UnifiedAppBar(
         title: 'Verify Code',
-        leading: widget.returnAuctionId != null
+        leading: showCancel
             ? IconButton(icon: const Icon(Icons.close), onPressed: _onCancel)
             : null,
       ),

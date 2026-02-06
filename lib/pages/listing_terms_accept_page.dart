@@ -14,9 +14,12 @@ class ListingTermsAcceptPage extends StatefulWidget {
     super.key,
     this.returnAfterAccept = false,
     this.returnAuctionId,
+    this.returnToListing = false,
   });
   final bool returnAfterAccept;
   final String? returnAuctionId;
+  /// When true, user came from Create Auction listing flow; show Cancel, return to Home on cancel.
+  final bool returnToListing;
 
   @override
   State<ListingTermsAcceptPage> createState() => _ListingTermsAcceptPageState();
@@ -88,15 +91,23 @@ class _ListingTermsAcceptPageState extends State<ListingTermsAcceptPage> {
   }
 
   void _onCancel() {
-    Navigator.of(context).pop();
+    if (widget.returnAuctionId != null) {
+      Navigator.of(context).popUntil(
+          (Route<dynamic> r) => r.settings.name?.startsWith('/auctionDetail') == true);
+    } else if (widget.returnToListing) {
+      Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final showCancel = widget.returnAuctionId != null || widget.returnToListing;
     return Scaffold(
       appBar: UnifiedAppBar(
         title: 'Auction Terms & Conditions',
-        leading: widget.returnAuctionId != null
+        leading: showCancel
             ? IconButton(icon: const Icon(Icons.close), onPressed: _onCancel)
             : null,
       ),

@@ -255,7 +255,12 @@ class _KycPageState extends State<KycPage> {
   }
 
   void _onCancel() {
-    Navigator.of(context).pop();
+    if (widget.returnAuctionId != null) {
+      Navigator.of(context).popUntil(
+          (Route<dynamic> r) => r.settings.name?.startsWith('/auctionDetail') == true);
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   @override

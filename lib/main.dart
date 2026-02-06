@@ -64,7 +64,8 @@ class MyApp extends StatelessWidget {
               ? ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>
               : null;
           final returnAuctionId = args?['returnAuctionId'] as String?;
-          return LoginPhonePage(returnAuctionId: returnAuctionId);
+          final returnToListing = args?['returnToListing'] as bool? ?? false;
+          return LoginPhonePage(returnAuctionId: returnAuctionId, returnToListing: returnToListing);
         },
         '/verifyOtp': (context) => const VerifyOtpPage(
               verificationId: '',
@@ -75,7 +76,8 @@ class MyApp extends StatelessWidget {
               ? ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>
               : null;
           final returnAuctionId = args?['returnAuctionId'] as String?;
-          return CreateProfilePage(returnAuctionId: returnAuctionId);
+          final returnToListing = args?['returnToListing'] as bool? ?? false;
+          return CreateProfilePage(returnAuctionId: returnAuctionId, returnToListing: returnToListing);
         },
         '/home': (context) => const MainShell(),
         '/explore': (context) => const ExplorePage(),

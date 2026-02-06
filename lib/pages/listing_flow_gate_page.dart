@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
 import 'email_verification_page.dart';
 import 'listing_terms_accept_page.dart';
+import 'login_phone_page.dart';
 import 'sell_create_auction_page.dart';
 
 /// Runs listing eligibility check and redirects to the correct step.
@@ -37,18 +38,25 @@ class _ListingFlowGatePageState extends State<ListingFlowGatePage> {
         );
         return;
       case ListingEligibilityStep.verifyPhone:
-        setState(() => _error = result.message);
+        // Guest or not signed in: send to Phone OTP, then resume listing flow
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const LoginPhonePage(returnToListing: true),
+          ),
+        );
         return;
       case ListingEligibilityStep.verifyEmail:
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
-            builder: (_) => const EmailVerificationPage(),
+            builder: (_) => const EmailVerificationPage(returnToListing: true),
           ),
         );
         return;
       case ListingEligibilityStep.acceptTerms:
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(builder: (_) => const ListingTermsAcceptPage()),
+          MaterialPageRoute<void>(
+            builder: (_) => const ListingTermsAcceptPage(returnToListing: true),
+          ),
         );
         return;
     }

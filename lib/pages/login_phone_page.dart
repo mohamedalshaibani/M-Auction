@@ -1,15 +1,20 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
+import 'create_profile_page.dart';
+import 'listing_flow_gate_page.dart';
 import 'verify_otp_page.dart';
 
 class LoginPhonePage extends StatefulWidget {
-  const LoginPhonePage({super.key, this.returnAuctionId});
+  const LoginPhonePage({super.key, this.returnAuctionId, this.returnToListing = false});
 
   /// When set, show Cancel and return to this auction on cancel; pass to OTP/next steps.
   final String? returnAuctionId;
+  /// When true, user came from Create Auction; show Cancel, return to Home on cancel, resume listing flow after login.
+  final bool returnToListing;
 
   @override
   State<LoginPhonePage> createState() => _LoginPhonePageState();
@@ -30,17 +35,44 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
     super.dispose();
   }
 
-  void _navigateAfterLogin(BuildContext context) {
-    if (widget.returnAuctionId != null) {
-      Navigator.of(context).popUntil((r) => r.isFirst);
-      Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+  Future<void> _navigateAfterLogin(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final userExists = await FirestoreService().userExists(user.uid);
+    if (!mounted) return;
+    if (userExists) {
+      if (widget.returnAuctionId != null) {
+        Navigator.of(context).popUntil((r) => r.isFirst);
+        Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+      } else if (widget.returnToListing) {
+        Navigator.of(context).popUntil((r) => r.isFirst);
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const ListingFlowGatePage()),
+        );
+      } else {
+        Navigator.of(context).pushReplacementNamed('/authGate');
+      }
     } else {
-      Navigator.of(context).pushReplacementNamed('/authGate');
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => CreateProfilePage(
+            returnAuctionId: widget.returnAuctionId,
+            returnToListing: widget.returnToListing,
+          ),
+        ),
+      );
     }
   }
 
   void _onCancel() {
-    Navigator.of(context).pop();
+    if (widget.returnAuctionId != null) {
+      Navigator.of(context).popUntil(
+          (Route<dynamic> r) => r.settings.name?.startsWith('/auctionDetail') == true);
+    } else if (widget.returnToListing) {
+      Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _sendCode() async {
@@ -106,6 +138,7 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
                   verificationId: verificationId,
                   phoneNumber: phoneNumber,
                   returnAuctionId: widget.returnAuctionId,
+                  returnToListing: widget.returnToListing,
                 ),
               ),
             );
@@ -152,10 +185,11 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
 
   @override
   Widget build(BuildContext context) {
+    final showCancel = widget.returnAuctionId != null || widget.returnToListing;
     return Scaffold(
-      appBar: widget.returnAuctionId != null
+      appBar: showCancel
           ? UnifiedAppBar(
-              title: 'Sign In',
+              title: 'Sign in / Create account',
               leading: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: _onCancel,
@@ -186,7 +220,7 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
                       const SizedBox(height: 24),
                       // Header
                       Text(
-                        'Welcome to M Auction',
+                        'Sign in / Create account',
                         style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
@@ -194,7 +228,7 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Enter your phone number to continue',
+                        'One flow for sign in and registration.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: AppTheme.textSecondary,
                             ),
@@ -245,6 +279,7 @@ class _LoginPhonePageState extends State<LoginPhonePage> {
                           hintText: '50 123 4567',
                           prefixIcon: const Icon(Icons.phone_outlined),
                           prefixText: '+971 ',
+                          helperText: 'Enter your phone number. If you\'re new, we\'ll create your account automatically.',
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {

@@ -74,18 +74,19 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
     if (result.canBid) return true;
     if (!mounted) return false;
     final step = result.nextStep;
-    final message = result.message;
     final nav = Navigator.of(context);
     final args = <String, dynamic>{'returnAuctionId': widget.auctionId};
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Complete setup to bid'),
-        content: Text(message),
+        content: const Text(
+          'To place bids, please complete account setup (phone + email + profile + terms + deposit/KYC).',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            child: const Text('Not now'),
           ),
           FilledButton(
             onPressed: () {

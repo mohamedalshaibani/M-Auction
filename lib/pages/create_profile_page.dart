@@ -3,11 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
+import 'listing_flow_gate_page.dart';
 
 class CreateProfilePage extends StatefulWidget {
-  const CreateProfilePage({super.key, this.returnAuctionId});
+  const CreateProfilePage({super.key, this.returnAuctionId, this.returnToListing = false});
 
   final String? returnAuctionId;
+  final bool returnToListing;
 
   @override
   State<CreateProfilePage> createState() => _CreateProfilePageState();
@@ -57,6 +59,11 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
         if (widget.returnAuctionId != null) {
           Navigator.of(context).popUntil((r) => r.isFirst);
           Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+        } else if (widget.returnToListing) {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ListingFlowGatePage()),
+          );
         } else {
           Navigator.of(context).pushReplacementNamed('/home');
         }
@@ -72,13 +79,21 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
   }
 
   void _onCancel() {
-    Navigator.of(context).pop();
+    if (widget.returnAuctionId != null) {
+      Navigator.of(context).popUntil(
+          (Route<dynamic> r) => r.settings.name?.startsWith('/auctionDetail') == true);
+    } else if (widget.returnToListing) {
+      Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final showCancel = widget.returnAuctionId != null || widget.returnToListing;
     return Scaffold(
-      appBar: widget.returnAuctionId != null
+      appBar: showCancel
           ? UnifiedAppBar(
               title: 'Create Profile',
               leading: IconButton(

@@ -16,12 +16,12 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    HomePage(),
-    ExplorePage(),
-    WalletPage(),
-    ProfilePage(),
-    MorePage(),
+  List<Widget> get _pages => [
+    const HomePage(),
+    const ExplorePage(),
+    WalletPage(onNotNow: () => setState(() => _currentIndex = 0)),
+    ProfilePage(onNotNow: () => setState(() => _currentIndex = 0)),
+    const MorePage(),
   ];
 
   @override

@@ -4,16 +4,96 @@ import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
 
 /// Static FAQ entries (used when Firestore is empty or fails).
+/// Final version – matches Help & FAQ content.
 final List<Map<String, String>> _staticFaq = [
-  {'question': 'What is M Auction?', 'answer': 'M Auction is a premium auction platform for luxury and high-value items. Sellers list items; buyers place bids. The highest bidder when the auction ends wins and completes the purchase.'},
-  {'question': 'Do I need to verify my identity?', 'answer': 'Yes. Identity verification (KYC) is required to list items or place bids. This helps keep the platform safe for everyone.'},
-  {'question': 'What is a deposit and when do I need it?', 'answer': 'A deposit may be required to bid on some auctions. It is held until the auction ends. If you win, it may be applied to the purchase or held until delivery is confirmed. If you don\'t win, it is released back to you.'},
-  {'question': 'How do I place a bid?', 'answer': 'Open an active auction, enter your bid amount (it must be at least the minimum increment above the current price), and tap Place Bid. You must have completed KYC and met any deposit requirement.'},
-  {'question': 'What happens when I win an auction?', 'answer': 'You will need to confirm the purchase, pay the final price and any buyer commission, and accept the sale agreement. Once the seller ships and you confirm delivery, the transaction is complete.'},
-  {'question': 'What fees apply?', 'answer': 'Sellers pay a listing fee when an auction goes live. When an item sells, commission may apply (shown at listing and checkout). All fees are displayed before you commit.'},
-  {'question': 'How do I list an item?', 'answer': 'Go to Create Auction, add photos and details, set a start price and duration, and submit for approval. Once approved, pay the listing fee to make the auction live.'},
-  {'question': 'Can I cancel a bid?', 'answer': 'Bids are binding. Only place a bid if you intend to buy at that price if you win. Contact support in exceptional circumstances.'},
-  {'question': 'How do I get help?', 'answer': 'Use the Contact Us page to email support or submit a message. You can also use Live Chat from the More tab to message the support team.'},
+  {
+    'question': 'What is M Auction?',
+    'answer': 'M Auction is a digital auction platform that connects buyers and sellers of luxury and high-value items such as watches, bags, art, jewellery, and collectibles.\n\n'
+        'The platform allows sellers to list items and buyers to place bids. M Auction acts solely as a technology intermediary and does not sell, purchase, inspect, or guarantee any items listed on the platform.',
+  },
+  {
+    'question': 'How does M Auction work?',
+    'answer': 'Sellers create auction listings by adding item details, images, and a starting price.\n'
+        'Buyers can browse auctions freely and place bids on active listings.\n'
+        'When an auction ends, the highest bidder wins and proceeds to complete the transaction directly with the seller according to the agreed terms.\n\n'
+        'M Auction facilitates the process by providing the platform, verification steps, and agreement records, but does not take ownership of any item or participate in the physical exchange.',
+  },
+  {
+    'question': 'Do I need to verify my identity?',
+    'answer': 'Yes. Identity verification (KYC) is required to place bids or list items.\n'
+        'This helps reduce fraud and ensures that users on the platform are real and accountable.',
+  },
+  {
+    'question': 'What is a deposit and when is it required?',
+    'answer': 'Some auctions may require a refundable deposit to place bids.\n'
+        'Deposits help ensure serious bidding behavior.\n'
+        'If you do not win the auction, the deposit is released back to you according to the platform rules.',
+  },
+  {
+    'question': 'How do I place a bid?',
+    'answer': 'Open an active auction, select or enter your bid amount (following the minimum increment rules), and tap Place Bid.\n\n'
+        'Before bidding, you must:\n'
+        '• Be logged in\n'
+        '• Complete required verification steps\n'
+        '• Accept the Terms & Conditions\n'
+        '• Meet any deposit requirements\n\n'
+        'All bids are binding commitments.',
+  },
+  {
+    'question': 'What happens when I win an auction?',
+    'answer': 'When you win an auction:\n'
+        '• You commit to purchasing the item at your winning bid price\n'
+        '• You and the seller are responsible for confirming item details, payment, and delivery\n'
+        '• Once both parties confirm completion, the transaction is considered final\n\n'
+        'M Auction does not guarantee the item condition, authenticity, or delivery and is not a party to the sale contract.',
+  },
+  {
+    'question': 'What fees apply?',
+    'answer': 'Sellers may be charged a listing fee to publish an auction.\n'
+        'Additional commissions or fees may apply and will always be clearly displayed before you confirm any action.\n'
+        'All users are responsible for reviewing and accepting applicable fees before proceeding.',
+  },
+  {
+    'question': 'How do I list an item?',
+    'answer': 'To list an item:\n'
+        '1. Sign in using your mobile number\n'
+        '2. Verify your email and complete required profile details\n'
+        '3. Accept the Terms & Conditions\n'
+        '4. Create the listing with accurate information and images\n'
+        '5. Pay the listing fee (if applicable)\n'
+        '6. Complete any required verification steps\n\n'
+        'All listings are subject to review and approval before going live.',
+  },
+  {
+    'question': 'Can I cancel a bid?',
+    'answer': 'Bids are binding and should only be placed if you fully intend to purchase the item if you win.\n'
+        'In exceptional circumstances, you may contact support, but bid cancellation is not guaranteed.',
+  },
+  {
+    'question': 'What happens in case of fraud or disputes?',
+    'answer': 'M Auction takes fraud prevention seriously.\n'
+        'If suspicious activity, fraud, or misuse is detected:\n'
+        '• The platform may suspend the transaction or involved accounts\n'
+        '• User access may be restricted or terminated\n'
+        '• Relevant user data may be shared with the affected party or official authorities where legally required\n\n'
+        'Responsibility for verifying items, agreements, and payments lies fully with the buyer and seller.',
+  },
+  {
+    'question': 'Is M Auction responsible for the transaction?',
+    'answer': 'No.\n'
+        'M Auction is a technology platform that facilitates communication and bidding between users.\n'
+        'The platform does not:\n'
+        '• Own listed items\n'
+        '• Inspect or authenticate products\n'
+        '• Guarantee payments or delivery\n\n'
+        'All legal responsibility rests with the buyer and seller.',
+  },
+  {
+    'question': 'How do I get help?',
+    'answer': 'If you need assistance:\n'
+        '• Use the Contact Us page to send a message or email support\n'
+        '• Use Live Chat from the More tab for direct support during available hours',
+  },
 ];
 
 /// Help & FAQ: Firestore faq collection with static fallback and search.

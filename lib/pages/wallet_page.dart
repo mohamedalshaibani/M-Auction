@@ -4,12 +4,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
+import '../widgets/guest_sign_in_prompt.dart';
 import '../widgets/unified_app_bar.dart';
+import 'payment_page.dart';
 
 class WalletPage extends StatefulWidget {
-  const WalletPage({super.key, this.returnAuctionId});
+  const WalletPage({super.key, this.returnAuctionId, this.onNotNow});
 
   final String? returnAuctionId;
+  /// When in MainShell as guest, called when user taps "Not now" (switch to Home).
+  final VoidCallback? onNotNow;
 
   @override
   State<WalletPage> createState() => _WalletPageState();
@@ -18,46 +22,114 @@ class WalletPage extends StatefulWidget {
 class _WalletPageState extends State<WalletPage> {
   final FirestoreService _firestoreService = FirestoreService();
 
-  void _showAddDepositModal() {
-    showModalBottomSheet(
+  static const List<double> _depositAmounts = [50, 100, 200, 500];
+
+  void _showAddDepositOptions() {
+    final amountController = TextEditingController(text: '100');
+    showModalBottomSheet<double?>(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.info_outline,
-              size: 48,
-              color: AppTheme.primaryBlue,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Payments Available on Web',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Add Deposit',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Choose amount (AED) or enter custom',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _depositAmounts.map((amount) {
+                  return ActionChip(
+                    label: Text('AED ${amount.toInt()}'),
+                    onPressed: () {
+                      Navigator.pop(context, amount);
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Custom amount (AED)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
                   ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Mobile payment integration is coming soon. Please use the web version to add deposits.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppTheme.textSecondary,
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () {
+                      final value = double.tryParse(
+                            amountController.text.trim().replaceAll(',', ''),
+                          );
+                      if (value != null && value >= 10) {
+                        Navigator.pop(context, value);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Enter at least AED 10'),
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Continue to payment'),
                   ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Got it'),
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    );
+    ).then((amount) {
+      if (amount != null && amount >= 10 && mounted) {
+        Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (context) => PaymentPage(
+              type: 'deposit',
+              amount: amount,
+              title: 'Add Deposit',
+            ),
+          ),
+        ).then((success) {
+          if (success == true && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Deposit added successfully'),
+                backgroundColor: AppTheme.success,
+              ),
+            );
+          }
+        });
+      }
+    });
   }
 
   void _showDepositRules() {
@@ -130,29 +202,17 @@ class _WalletPageState extends State<WalletPage> {
                 )
               : null,
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.account_balance_wallet_outlined, size: 64, color: AppTheme.textTertiary),
-                const SizedBox(height: 16),
-                Text(
-                  'Sign in to access your wallet',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/login'),
-                  child: const Text('Sign in'),
-                ),
-              ],
-            ),
-          ),
+        body: GuestSignInPrompt(
+          title: 'Wallet',
+          icon: Icons.account_balance_wallet_outlined,
+          returnAuctionId: widget.returnAuctionId,
+          onNotNow: widget.onNotNow,
+          onContinue: () {
+            final args = widget.returnAuctionId != null
+                ? <String, dynamic>{'returnAuctionId': widget.returnAuctionId}
+                : null;
+            Navigator.of(context).pushNamed('/login', arguments: args);
+          },
         ),
       );
     }
@@ -321,7 +381,7 @@ class _WalletPageState extends State<WalletPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         ElevatedButton.icon(
-                          onPressed: _showAddDepositModal,
+                          onPressed: _showAddDepositOptions,
                           icon: const Icon(Icons.add),
                           label: const Text('Add Deposit'),
                           style: ElevatedButton.styleFrom(
