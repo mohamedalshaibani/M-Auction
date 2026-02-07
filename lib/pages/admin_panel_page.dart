@@ -10,9 +10,13 @@ import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/unified_app_bar.dart';
+import 'admin_support_thread_page.dart';
 
 class AdminPanelPage extends StatefulWidget {
-  const AdminPanelPage({super.key});
+  const AdminPanelPage({super.key, this.initialTabIndex = 0});
+
+  /// Tab index to show on open (0=Auctions, 1=Deposits, 2=KYC, 3=Revenue, 4=Ads, 5=Support).
+  final int initialTabIndex;
 
   @override
   State<AdminPanelPage> createState() => _AdminPanelPageState();
@@ -31,7 +35,11 @@ class _AdminPanelPageState extends State<AdminPanelPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(
+      length: 6,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 5),
+    );
   }
 
   Future<bool> _checkAdmin() async {
@@ -176,6 +184,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                 Tab(text: 'KYC Requests'),
                 Tab(text: 'Revenue'),
                 Tab(text: 'Ads'),
+                Tab(text: 'Support'),
               ],
             ),
           ),
@@ -187,6 +196,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
               _buildKycTab(),
               _buildRevenueTab(),
               _buildAdsTab(),
+              _buildSupportTab(),
             ],
           ),
         );
@@ -582,11 +592,18 @@ class _AdminPanelPageState extends State<AdminPanelPage>
             final doc = requests[index];
             final data = doc.data() as Map<String, dynamic>;
             final uid = doc.id;
-            final fullName = data['fullName'] as String? ?? 'N/A';
-            final nationality = data['nationality'] as String? ?? 'N/A';
+            // Support new fields (firstName, lastName, nationalityName) and legacy (fullName, nationality)
+            final firstName = data['firstName'] as String?;
+            final lastName = data['lastName'] as String?;
+            final fullNameLegacy = data['fullName'] as String?;
+            final displayName = (firstName != null && lastName != null)
+                ? '$firstName $lastName'
+                : (fullNameLegacy ?? 'N/A');
+            final nationalityName = data['nationalityName'] as String?;
+            final nationalityLegacy = data['nationality'] as String?;
+            final nationality = nationalityName ?? nationalityLegacy ?? 'N/A';
             final idType = data['idType'] as String? ?? 'N/A';
             final idNumber = data['idNumber'] as String? ?? 'N/A';
-            final proofType = data['proofType'] as String? ?? 'N/A';
             final idFrontUrl = data['idFrontUrl'] as String?;
             final idBackUrl = data['idBackUrl'] as String?;
             final selfieUrl = data['selfieUrl'] as String?;
@@ -598,20 +615,18 @@ class _AdminPanelPageState extends State<AdminPanelPage>
             return Card(
               margin: const EdgeInsets.only(bottom: 16),
               child: ExpansionTile(
-                title: Text(fullName),
-                subtitle: Text('ID: $idNumber | Proof: $proofType'),
+                title: Text(displayName),
+                subtitle: Text('ID: $idNumber'),
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Full Name: $fullName'),
+                        Text('Name: $displayName'),
                         Text('Nationality: $nationality'),
                         Text('ID Type: $idType'),
                         Text('ID Number: $idNumber'),
-                        Text('Proof Type: $proofType'),
-                        if (proofNote != null) Text('Proof Note: $proofNote'),
                         const SizedBox(height: 16),
                         if (idFrontUrl != null)
                           Padding(
@@ -988,6 +1003,111 @@ class _AdminPanelPageState extends State<AdminPanelPage>
                     Text('Date: $dateText'),
                   ],
                 ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSupportTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('support_threads').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading support threads',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ],
+            ),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.chat_bubble_outline, size: 64, color: AppTheme.textTertiary),
+                const SizedBox(height: 16),
+                Text(
+                  'No support threads yet',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ],
+            ),
+          );
+        }
+        final sorted = List<QueryDocumentSnapshot>.from(docs)
+          ..sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>?;
+            final bData = b.data() as Map<String, dynamic>?;
+            final aT = (aData?['lastMessageFromUserAt'] ?? aData?['updatedAt']) as Timestamp?;
+            final bT = (bData?['lastMessageFromUserAt'] ?? bData?['updatedAt']) as Timestamp?;
+            if (aT == null && bT == null) return 0;
+            if (aT == null) return 1;
+            if (bT == null) return -1;
+            return bT.compareTo(aT);
+          });
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: sorted.length,
+          itemBuilder: (context, index) {
+            final doc = sorted[index];
+            final threadId = doc.id;
+            final data = doc.data() as Map<String, dynamic>?;
+            final updatedAt = data?['updatedAt'] as Timestamp?;
+            final lastUser = data?['lastMessageFromUserAt'] as Timestamp?;
+            final lastRead = data?['lastAdminReadAt'] as Timestamp?;
+            final unread = lastUser != null && (lastRead == null || lastUser.compareTo(lastRead) > 0);
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.chat_bubble_outline, color: AppTheme.primaryBlue),
+                    if (unread)
+                      Positioned(
+                        top: -2,
+                        right: -2,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.error,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                title: Text('User: ${threadId.length > 12 ? '${threadId.substring(0, 12)}...' : threadId}'),
+                subtitle: updatedAt != null
+                    ? Text(
+                        'Updated ${relativeTime(updatedAt.toDate())}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    : null,
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => AdminSupportThreadPage(threadId: threadId),
+                    ),
+                  );
+                },
               ),
             );
           },

@@ -80,20 +80,18 @@ class KycService {
     return await ref.getDownloadURL();
   }
 
-  // Submit KYC request
+  // Submit KYC request (identity only; no selfie, no product proof)
   Future<void> submitKycRequest({
     required String uid,
-    required String fullName,
-    required String nationality,
+    required String firstName,
+    required String lastName,
+    required String nationalityCode,
+    required String nationalityName,
     required String dob,
     required String idType,
     required String idNumber,
     required String idFrontUrl,
     String? idBackUrl,
-    required String selfieUrl,
-    required String proofType,
-    required String proofUrl,
-    String? proofNote,
   }) async {
     final batch = _firestore.batch();
 
@@ -101,17 +99,15 @@ class KycService {
     final kycRequestRef = _firestore.collection('kycRequests').doc(uid);
     batch.set(kycRequestRef, {
       'userId': uid,
-      'fullName': fullName,
-      'nationality': nationality,
+      'firstName': firstName,
+      'lastName': lastName,
+      'nationalityCode': nationalityCode,
+      'nationalityName': nationalityName,
       'dob': dob,
       'idType': idType,
       'idNumber': idNumber,
       'idFrontUrl': idFrontUrl,
       if (idBackUrl != null) 'idBackUrl': idBackUrl,
-      'selfieUrl': selfieUrl,
-      'proofType': proofType,
-      'proofUrl': proofUrl,
-      if (proofNote != null) 'proofNote': proofNote,
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));

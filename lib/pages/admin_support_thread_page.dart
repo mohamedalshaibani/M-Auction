@@ -4,20 +4,38 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
 
-/// Live Chat: direct conversation between customer and all admins (multi-admin).
-/// Thread stored in support_threads/{threadId}/messages (threadId = userId).
-/// Message fields: senderUid, senderRole, text, createdAt.
-class LiveChatPage extends StatefulWidget {
-  const LiveChatPage({super.key});
+/// Admin view of a single support thread. threadId is the user's uid.
+class AdminSupportThreadPage extends StatefulWidget {
+  final String threadId;
+
+  const AdminSupportThreadPage({super.key, required this.threadId});
 
   @override
-  State<LiveChatPage> createState() => _LiveChatPageState();
+  State<AdminSupportThreadPage> createState() => _AdminSupportThreadPageState();
 }
 
-class _LiveChatPageState extends State<LiveChatPage> {
+class _AdminSupportThreadPageState extends State<AdminSupportThreadPage> {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isSending = false;
+  bool _hasMarkedRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _markAdminRead();
+  }
+
+  Future<void> _markAdminRead() async {
+    if (_hasMarkedRead) return;
+    _hasMarkedRead = true;
+    try {
+      await FirebaseFirestore.instance
+          .collection('support_threads')
+          .doc(widget.threadId)
+          .update({'lastAdminReadAt': FieldValue.serverTimestamp()});
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -26,7 +44,7 @@ class _LiveChatPageState extends State<LiveChatPage> {
     super.dispose();
   }
 
-  Future<void> _sendMessage() async {
+  Future<void> _sendReply() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final text = _textController.text.trim();
@@ -36,31 +54,22 @@ class _LiveChatPageState extends State<LiveChatPage> {
     try {
       final threadRef = FirebaseFirestore.instance
           .collection('support_threads')
-          .doc(user.uid);
-      // Ensure thread exists (for Cloud Function / admin listing)
-      final now = FieldValue.serverTimestamp();
-      await threadRef.set({
-        'userId': user.uid,
-        'updatedAt': now,
-        'lastMessageFromUserAt': now,
-      }, SetOptions(merge: true));
+          .doc(widget.threadId);
       await threadRef.collection('messages').add({
         'senderUid': user.uid,
-        'senderRole': 'user',
+        'senderRole': 'admin',
         'text': text,
-        'createdAt': now,
+        'createdAt': FieldValue.serverTimestamp(),
       });
-      await threadRef.update({'updatedAt': now, 'lastMessageFromUserAt': now});
+      await threadRef.update({'updatedAt': FieldValue.serverTimestamp()});
       _textController.clear();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -74,24 +83,17 @@ class _LiveChatPageState extends State<LiveChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return Scaffold(
-        appBar: const UnifiedAppBar(title: 'Live Chat'),
-        body: const Center(child: Text('Please sign in to use Live Chat')),
-      );
-    }
-
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: const UnifiedAppBar(title: 'Live Chat'),
+      appBar: UnifiedAppBar(title: 'Support thread'),
       body: Column(
         children: [
+          _UserIdentityCard(threadId: widget.threadId),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('support_threads')
-                  .doc(user.uid)
+                  .doc(widget.threadId)
                   .collection('messages')
                   .orderBy('createdAt', descending: false)
                   .snapshots(),
@@ -100,38 +102,16 @@ class _LiveChatPageState extends State<LiveChatPage> {
                   return Center(
                     child: Text(
                       'Unable to load chat',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppTheme.error,
-                          ),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.error),
                     ),
                   );
                 }
                 final docs = snapshot.data?.docs ?? [];
                 if (docs.isEmpty) {
                   return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.chat_bubble_outline, size: 48, color: AppTheme.textTertiary),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Start a conversation',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Your messages are seen by our support team. We\'ll reply as soon as we can.',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.textTertiary,
-                                ),
-                          ),
-                        ],
-                      ),
+                    child: Text(
+                      'No messages yet',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.textTertiary),
                     ),
                   );
                 }
@@ -142,13 +122,11 @@ class _LiveChatPageState extends State<LiveChatPage> {
                   itemBuilder: (context, index) {
                     final doc = docs[index];
                     final data = doc.data() as Map<String, dynamic>;
-                    final senderUid = data['senderUid'] as String? ?? data['senderId'] as String? ?? '';
                     final role = data['senderRole'] as String? ?? data['role'] as String? ?? 'user';
-                    final text = data['text'] as String? ?? '';
-                    final isUser = role == 'user' || senderUid == user.uid;
+                    final isAdmin = role == 'admin';
                     return _ChatBubble(
-                      text: text,
-                      isUser: isUser,
+                      text: data['text'] as String? ?? '',
+                      isUser: isAdmin,
                       createdAt: data['createdAt'] as Timestamp?,
                     );
                   },
@@ -166,26 +144,23 @@ class _LiveChatPageState extends State<LiveChatPage> {
                     child: TextField(
                       controller: _textController,
                       decoration: InputDecoration(
-                        hintText: 'Type a message...',
+                        hintText: 'Reply...',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
                         fillColor: AppTheme.backgroundGrey,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
                       maxLines: 3,
                       textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
+                      onSubmitted: (_) => _sendReply(),
                     ),
                   ),
                   const SizedBox(width: 8),
                   IconButton.filled(
-                    onPressed: _isSending ? null : _sendMessage,
+                    onPressed: _isSending ? null : _sendReply,
                     icon: _isSending
                         ? const SizedBox(
                             width: 22,
@@ -208,16 +183,69 @@ class _LiveChatPageState extends State<LiveChatPage> {
   }
 }
 
+class _UserIdentityCard extends StatelessWidget {
+  final String threadId;
+
+  const _UserIdentityCard({required this.threadId});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('users').doc(threadId).get(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const SizedBox.shrink();
+        }
+        final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+        final displayName = data['displayName'] as String? ?? '—';
+        final phoneNumber = data['phoneNumber'] as String? ?? '—';
+        final email = data['email'] as String?;
+        final kycStatus = data['kycStatus'] as String? ?? '—';
+        final phoneVerified = data['phoneVerified'] as bool? ?? false;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'User identity',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text('Name: $displayName', style: Theme.of(context).textTheme.bodySmall),
+              Text('Phone: $phoneNumber', style: Theme.of(context).textTheme.bodySmall),
+              if (email != null && email.isNotEmpty)
+                Text('Email: $email', style: Theme.of(context).textTheme.bodySmall),
+              Text('UID: $threadId', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11, color: AppTheme.textTertiary)),
+              Text(
+                'Verified: ${phoneVerified ? "Phone ✓" : "—"} | KYC: $kycStatus',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ChatBubble extends StatelessWidget {
   final String text;
   final bool isUser;
   final Timestamp? createdAt;
 
-  const _ChatBubble({
-    required this.text,
-    required this.isUser,
-    this.createdAt,
-  });
+  const _ChatBubble({required this.text, required this.isUser, this.createdAt});
 
   @override
   Widget build(BuildContext context) {

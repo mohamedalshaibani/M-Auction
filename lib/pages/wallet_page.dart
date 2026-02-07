@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/guest_sign_in_prompt.dart';
 import '../widgets/unified_app_bar.dart';
+import '../widgets/admin_support_badge.dart';
 import 'payment_page.dart';
 
 class WalletPage extends StatefulWidget {
@@ -201,6 +202,7 @@ class _WalletPageState extends State<WalletPage> {
                   onPressed: () => Navigator.of(context).pop(),
                 )
               : null,
+          actions: const [AdminSupportBadge()],
         ),
         body: GuestSignInPrompt(
           title: 'Wallet',
@@ -227,6 +229,7 @@ class _WalletPageState extends State<WalletPage> {
                 onPressed: () => Navigator.of(context).pop(),
               )
             : null,
+        actions: const [AdminSupportBadge()],
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: _firestoreService.streamWallet(user.uid),

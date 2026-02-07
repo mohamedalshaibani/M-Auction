@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import '../services/kyc_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/countries.dart';
 import '../widgets/unified_app_bar.dart';
 import 'dart:html' if (dart.library.io) '../web_stubs.dart' as html;
 
@@ -20,37 +21,35 @@ class KycPage extends StatefulWidget {
 
 class _KycPageState extends State<KycPage> {
   final _formKey = GlobalKey<FormState>();
-  final _fullNameController = TextEditingController();
-  final _nationalityController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _dobController = TextEditingController();
   final _idNumberController = TextEditingController();
-  final _proofNoteController = TextEditingController();
+
+  int _step = 0; // 0 = identity, 1 = ID photos + submit
+  CountryEntry? _selectedCountry;
 
   String _selectedIdType = 'EmiratesID';
-  String _selectedProofType = 'receipt';
 
   Uint8List? _idFrontBytes;
   Uint8List? _idBackBytes;
-  Uint8List? _selfieBytes;
-  Uint8List? _proofBytes;
-
   String? _idFrontFileName;
   String? _idBackFileName;
-  String? _selfieFileName;
-  String? _proofFileName;
 
   bool _isSubmitting = false;
   String? _error;
 
   final KycService _kycService = KycService();
 
+  static const double _spacing = 10.0;
+  static const double _sectionGap = 14.0;
+
   @override
   void dispose() {
-    _fullNameController.dispose();
-    _nationalityController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _dobController.dispose();
     _idNumberController.dispose();
-    _proofNoteController.dispose();
     super.dispose();
   }
 
@@ -58,84 +57,66 @@ class _KycPageState extends State<KycPage> {
     if (kIsWeb) {
       final input = html.FileUploadInputElement()..accept = 'image/*';
       input.click();
-
       input.onChange.listen((e) {
         final files = input.files;
         if (files == null || files.isEmpty) return;
-
         final file = files[0];
         final reader = html.FileReader();
-
         reader.onLoadEnd.listen((e) {
           final bytes = reader.result as Uint8List?;
           if (bytes != null) {
             setState(() {
-              switch (type) {
-                case 'idFront':
-                  _idFrontBytes = bytes;
-                  _idFrontFileName = 'id_front.jpg';
-                  break;
-              case 'idBack':
+              if (type == 'idFront') {
+                _idFrontBytes = bytes;
+                _idFrontFileName = 'id_front.jpg';
+              } else {
                 _idBackBytes = bytes;
                 _idBackFileName = 'id_back.jpg';
-                break;
-              case 'selfie':
-                _selfieBytes = bytes;
-                _selfieFileName = 'selfie.jpg';
-                break;
-              case 'proof':
-                _proofBytes = bytes;
-                _proofFileName = 'proof.jpg';
-                break;
-            }
-          });
-        }
+              }
+            });
+          }
+        });
+        reader.readAsArrayBuffer(file);
       });
-
-      reader.readAsArrayBuffer(file);
-    });
     } else {
-      // Mobile platform - use image_picker
-      final ImagePicker picker = ImagePicker();
-      final XFile? file = await picker.pickImage(source: ImageSource.gallery);
-      
+      final picker = ImagePicker();
+      final file = await picker.pickImage(source: ImageSource.gallery);
       if (file != null) {
         final bytes = await file.readAsBytes();
         setState(() {
-          switch (type) {
-            case 'idFront':
-              _idFrontBytes = bytes;
-              _idFrontFileName = file.name;
-              break;
-            case 'idBack':
-              _idBackBytes = bytes;
-              _idBackFileName = file.name;
-              break;
-            case 'selfie':
-              _selfieBytes = bytes;
-              _selfieFileName = file.name;
-              break;
-            case 'proof':
-              _proofBytes = bytes;
-              _proofFileName = file.name;
-              break;
+          if (type == 'idFront') {
+            _idFrontBytes = bytes;
+            _idFrontFileName = file.name;
+          } else {
+            _idBackBytes = bytes;
+            _idBackFileName = file.name;
           }
         });
       }
     }
   }
 
-  Future<void> _submitKyc() async {
+  void _nextStep() {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedCountry == null) {
+      setState(() => _error = 'Please select your nationality');
+      return;
+    }
+    setState(() {
+      _error = null;
+      _step = 1;
+    });
+  }
+
+  Future<void> _submitKyc() async {
+    if (_idFrontBytes == null) {
+      setState(() => _error = 'Please upload ID front photo');
+      return;
+    }
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       setState(() => _error = 'No user logged in');
-      return;
-    }
-
-    if (_idFrontBytes == null || _selfieBytes == null || _proofBytes == null) {
-      setState(() => _error = 'Please upload all required files');
       return;
     }
 
@@ -145,16 +126,12 @@ class _KycPageState extends State<KycPage> {
     });
 
     try {
-      // Verify auth state before upload
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null || currentUser.uid != user.uid) {
         throw Exception('Authentication error: Please sign in again');
       }
-      
-      // Wait a brief moment to ensure auth token is fresh
       await Future.delayed(const Duration(milliseconds: 100));
-      
-      // Upload files
+
       final idFrontUrl = await _kycService.uploadFileFromBytes(
         uid: user.uid,
         fileName: _idFrontFileName!,
@@ -172,36 +149,17 @@ class _KycPageState extends State<KycPage> {
         );
       }
 
-      final selfieUrl = await _kycService.uploadFileFromBytes(
-        uid: user.uid,
-        fileName: _selfieFileName!,
-        bytes: _selfieBytes!,
-        contentType: 'image/jpeg',
-      );
-
-      final proofUrl = await _kycService.uploadFileFromBytes(
-        uid: user.uid,
-        fileName: _proofFileName!,
-        bytes: _proofBytes!,
-        contentType: 'image/jpeg',
-      );
-
-      // Submit KYC request
       await _kycService.submitKycRequest(
         uid: user.uid,
-        fullName: _fullNameController.text.trim(),
-        nationality: _nationalityController.text.trim(),
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        nationalityCode: _selectedCountry!.code,
+        nationalityName: _selectedCountry!.name,
         dob: _dobController.text.trim(),
         idType: _selectedIdType,
         idNumber: _idNumberController.text.trim(),
         idFrontUrl: idFrontUrl,
         idBackUrl: idBackUrl,
-        selfieUrl: selfieUrl,
-        proofType: _selectedProofType,
-        proofUrl: proofUrl,
-        proofNote: _proofNoteController.text.trim().isEmpty
-            ? null
-            : _proofNoteController.text.trim(),
       );
 
       if (mounted) {
@@ -224,32 +182,54 @@ class _KycPageState extends State<KycPage> {
   }
 
   Widget _buildFilePicker(String label, String type, Uint8List? bytes, String? fileName, bool required) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label + (required ? ' *' : ''),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: _isSubmitting ? null : () => _pickFile(type),
-              icon: const Icon(Icons.upload_file),
-              label: Text(fileName ?? 'Choose File'),
-            ),
-            if (bytes != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'File selected: ${fileName ?? 'Unknown'}',
-                  style: const TextStyle(color: Colors.green),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: _spacing),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label + (required ? ' *' : ''),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
                 ),
+          ),
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: _isSubmitting ? null : () => _pickFile(type),
+            icon: const Icon(Icons.upload_file, size: 20),
+            label: Text(fileName ?? 'Choose photo'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          if (bytes != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Selected',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.success),
               ),
-          ],
-        ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showCountryPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _CountryPickerSheet(
+        selected: _selectedCountry,
+        onSelect: (c) {
+          setState(() => _selectedCountry = c);
+          Navigator.of(ctx).pop();
+        },
       ),
     );
   }
@@ -273,162 +253,168 @@ class _KycPageState extends State<KycPage> {
             : null,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Identity Information',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _fullNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name *',
-                  border: OutlineInputBorder(),
+              // Privacy notice
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryLight.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Full name is required';
-                  }
-                  return null;
-                },
-                enabled: !_isSubmitting,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _nationalityController,
-                decoration: const InputDecoration(
-                  labelText: 'Nationality *',
-                  border: OutlineInputBorder(),
+                child: Text(
+                  'Privacy notice: Your identity details are kept confidential and are used only for verification, trust, and fraud prevention. We do not display your ID information publicly.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textPrimary,
+                        height: 1.4,
+                      ),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Nationality is required';
-                  }
-                  return null;
-                },
-                enabled: !_isSubmitting,
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _dobController,
-                decoration: const InputDecoration(
-                  labelText: 'Date of Birth (YYYY-MM-DD) *',
-                  border: OutlineInputBorder(),
+              const SizedBox(height: _sectionGap),
+
+              if (_step == 0) ...[
+                Text(
+                  'Step 1: Identity',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Date of birth is required';
-                  }
-                  return null;
-                },
-                enabled: !_isSubmitting,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _selectedIdType,
-                decoration: const InputDecoration(
-                  labelText: 'ID Type *',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: _spacing),
+                TextFormField(
+                  controller: _firstNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'First Name *',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  enabled: !_isSubmitting,
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'EmiratesID', child: Text('Emirates ID')),
-                  DropdownMenuItem(value: 'Passport', child: Text('Passport')),
-                ],
-                onChanged: _isSubmitting
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          setState(() => _selectedIdType = value);
-                        }
-                      },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _idNumberController,
-                decoration: const InputDecoration(
-                  labelText: 'ID Number *',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: _spacing),
+                TextFormField(
+                  controller: _lastNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Last Name *',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  enabled: !_isSubmitting,
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'ID number is required';
-                  }
-                  return null;
-                },
-                enabled: !_isSubmitting,
-              ),
-              const SizedBox(height: 24),
-              _buildFilePicker('ID Front Photo *', 'idFront', _idFrontBytes, _idFrontFileName, true),
-              const SizedBox(height: 16),
-              _buildFilePicker('ID Back Photo', 'idBack', _idBackBytes, _idBackFileName, false),
-              const SizedBox(height: 16),
-              _buildFilePicker('Selfie Photo *', 'selfie', _selfieBytes, _selfieFileName, true),
-              const SizedBox(height: 24),
-              const Text(
-                'Product Proof',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _selectedProofType,
-                decoration: const InputDecoration(
-                  labelText: 'Proof Type *',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'receipt', child: Text('Receipt')),
-                  DropdownMenuItem(value: 'serial', child: Text('Serial Number')),
-                  DropdownMenuItem(value: 'authCard', child: Text('Authentication Card')),
-                ],
-                onChanged: _isSubmitting
-                    ? null
-                    : (value) {
-                        if (value != null) {
-                          setState(() => _selectedProofType = value);
-                        }
-                      },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _proofNoteController,
-                decoration: const InputDecoration(
-                  labelText: 'Proof Note (Optional)',
-                  border: OutlineInputBorder(),
-                  hintText: 'Additional notes about the proof',
-                ),
-                maxLines: 3,
-                enabled: !_isSubmitting,
-              ),
-              const SizedBox(height: 16),
-              _buildFilePicker('Proof Photo *', 'proof', _proofBytes, _proofFileName, true),
-              const SizedBox(height: 24),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.red),
+                const SizedBox(height: _spacing),
+                InkWell(
+                  onTap: _isSubmitting ? null : _showCountryPicker,
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Nationality *',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: const Icon(Icons.arrow_drop_down),
+                    ),
+                    child: Text(
+                      _selectedCountry?.name ?? 'Select country',
+                      style: TextStyle(
+                        color: _selectedCountry != null ? AppTheme.textPrimary : AppTheme.textTertiary,
+                      ),
+                    ),
                   ),
                 ),
-              ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitKyc,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                const SizedBox(height: _spacing),
+                TextFormField(
+                  controller: _dobController,
+                  decoration: const InputDecoration(
+                    labelText: 'Date of Birth (YYYY-MM-DD) *',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  enabled: !_isSubmitting,
                 ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Submit KYC Request'),
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: _spacing),
+                DropdownButtonFormField<String>(
+                  value: _selectedIdType,
+                  decoration: const InputDecoration(
+                    labelText: 'ID Type *',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'EmiratesID', child: Text('Emirates ID')),
+                    DropdownMenuItem(value: 'Passport', child: Text('Passport')),
+                  ],
+                  onChanged: _isSubmitting ? null : (v) => v != null ? setState(() => _selectedIdType = v) : null,
+                ),
+                const SizedBox(height: _spacing),
+                TextFormField(
+                  controller: _idNumberController,
+                  decoration: const InputDecoration(
+                    labelText: 'ID Number *',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  enabled: !_isSubmitting,
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: _spacing),
+                  Text(
+                    _error!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.error),
+                  ),
+                ],
+                const SizedBox(height: _sectionGap),
+                FilledButton(
+                  onPressed: _nextStep,
+                  child: const Text('Next – ID photos'),
+                ),
+              ] else ...[
+                Text(
+                  'Step 2: ID photos',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Clear photo, all corners visible.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: _spacing),
+                _buildFilePicker('ID Front Photo *', 'idFront', _idFrontBytes, _idFrontFileName, true),
+                _buildFilePicker('ID Back Photo', 'idBack', _idBackBytes, _idBackFileName, false),
+                const SizedBox(height: _sectionGap),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: _spacing),
+                    child: Text(
+                      _error!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.error),
+                    ),
+                  ),
+                FilledButton(
+                  onPressed: _isSubmitting ? null : _submitKyc,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Submit KYC Request'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _isSubmitting ? null : () => setState(() => _step = 0),
+                  child: const Text('Back'),
+                ),
+              ],
+
+              const SizedBox(height: _sectionGap),
               StreamBuilder<DocumentSnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('users')
@@ -439,31 +425,35 @@ class _KycPageState extends State<KycPage> {
                   final userData = snapshot.data?.data() as Map<String, dynamic>?;
                   final kycStatus = userData?['kycStatus'] as String?;
                   final rejectionReason = userData?['kycRejectionReason'] as String?;
-
                   if (kycStatus == 'rejected' && rejectionReason != null) {
-                    return Card(
-                      color: Colors.red.shade50,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Previous Request Rejected',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text('Reason: $rejectionReason'),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'You can resubmit with corrected information.',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
+                    return Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.error.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Previous request rejected',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.error,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            rejectionReason,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textPrimary),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'You can resubmit with corrected information.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+                          ),
+                        ],
                       ),
                     );
                   }
@@ -473,6 +463,90 @@ class _KycPageState extends State<KycPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CountryPickerSheet extends StatefulWidget {
+  const _CountryPickerSheet({this.selected, required this.onSelect});
+
+  final CountryEntry? selected;
+  final void Function(CountryEntry) onSelect;
+
+  @override
+  State<_CountryPickerSheet> createState() => _CountryPickerSheetState();
+}
+
+class _CountryPickerSheetState extends State<_CountryPickerSheet> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() => setState(() => _query = _searchController.text.trim().toLowerCase()));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<CountryEntry> get _filtered {
+    if (_query.isEmpty) return kCountries;
+    return kCountries.where((c) => c.name.toLowerCase().contains(_query)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 8),
+          Text(
+            'Select nationality',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Type to search...',
+                prefixIcon: const Icon(Icons.search, size: 22),
+                border: const OutlineInputBorder(),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              autofocus: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 320,
+            child: ListView.builder(
+              itemCount: _filtered.length,
+              itemBuilder: (context, index) {
+                final c = _filtered[index];
+                final isSelected = widget.selected?.code == c.code;
+                return ListTile(
+                  dense: true,
+                  title: Text(c.name),
+                  trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primaryBlue, size: 22) : null,
+                  onTap: () => widget.onSelect(c),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1358,3 +1358,63 @@ exports.watermarkAuctionImage = functions
       return null;
     }
   });
+
+// Support chat: on new message, send push to admins (user message) or to user (admin reply)
+const ADMIN_TOPIC = 'admins';
+
+exports.onSupportMessageCreated = functions
+  .region('us-central1')
+  .firestore
+  .document('support_threads/{threadId}/messages/{messageId}')
+  .onCreate(async (snap, context) => {
+    const threadId = context.params.threadId;
+    const data = snap.data();
+    const senderRole = data.senderRole || data.role || 'user';
+    const text = (data.text || '').trim();
+    const preview = text.length > 80 ? text.substring(0, 77) + '...' : text;
+
+    try {
+      if (senderRole === 'user') {
+        await admin.messaging().send({
+          topic: ADMIN_TOPIC,
+          notification: {
+            title: 'New support message',
+            body: preview || 'New message in support chat',
+          },
+          data: {
+            threadId,
+            type: 'support_message',
+          },
+          android: {
+            priority: 'high',
+            notification: { channelId: 'support', priority: 'high' },
+          },
+          apns: {
+            payload: { aps: { sound: 'default', badge: 1, 'content-available': 1 } },
+            fcmOptions: {},
+          },
+        });
+        console.log('Sent support push to admins topic, threadId:', threadId);
+      } else if (senderRole === 'admin') {
+        const userDoc = await db.collection('users').doc(threadId).get();
+        const fcmToken = userDoc.data()?.fcmToken;
+        if (fcmToken) {
+          await admin.messaging().send({
+            token: fcmToken,
+            notification: {
+              title: 'Support reply',
+              body: preview || 'New reply from support',
+            },
+            data: { threadId, type: 'support_message' },
+            android: { priority: 'high' },
+            apns: {
+              payload: { aps: { sound: 'default', badge: 1 } },
+            },
+          });
+          console.log('Sent support reply push to user, threadId:', threadId);
+        }
+      }
+    } catch (err) {
+      console.error('onSupportMessageCreated send error:', err);
+    }
+  });

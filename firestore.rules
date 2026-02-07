@@ -28,15 +28,18 @@ service cloud.firestore {
       
       // Users can update only their own doc, with restrictions
       allow update: if isOwner(uid) && (
-        // User can update displayName, kycStatus (to pending only on submit), kycSubmittedAt
+        // User can update displayName, kycStatus (to pending only on submit), kycSubmittedAt, FCM fields
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'vipDepositWaived', 'strikeCount', 'kycRejectionReason']) ||
-         // Admin can update role, vipDepositWaived, strikeCount, kycStatus, kycRejectionReason
          isAdmin()) &&
         // User can only set kycStatus to 'pending' on submit, not to approved/rejected
         (!('kycStatus' in request.resource.data.diff(resource.data).affectedKeys()) ||
          request.resource.data.kycStatus == 'pending' ||
          isAdmin())
-      );
+      ) ||
+      // User can update only FCM token fields on their own doc
+      (isOwner(uid) &&
+       request.resource.data.diff(resource.data).affectedKeys()
+         .hasOnly(['fcmToken', 'platform', 'tokenUpdatedAt']));
     }
     
     // KYC Requests collection
@@ -70,8 +73,14 @@ service cloud.firestore {
       // Users can read their own wallet, admins can read all
       allow read: if isOwner(uid) || isAdmin();
       
-      // Create/delete only via server; owner can update reservedDeposit when placing bids
-      allow create, delete: if false;
+      // Owner can create their own wallet once (initial profile setup) with zero balances
+      allow create: if isOwner(uid) &&
+                      request.resource.data.keys().hasAll(['availableDeposit', 'lockedDeposit', 'reservedDeposit', 'depositStatus', 'updatedAt']) &&
+                      request.resource.data.availableDeposit == 0 &&
+                      request.resource.data.lockedDeposit == 0 &&
+                      request.resource.data.reservedDeposit == 0 &&
+                      request.resource.data.depositStatus == 'none';
+      allow delete: if false;
       allow update: if isOwner(uid) &&
                       request.resource.data.diff(resource.data).affectedKeys()
                         .hasOnly(['reservedDeposit', 'updatedAt']);
@@ -230,11 +239,20 @@ service cloud.firestore {
       allow write: if false;
     }
     
-    // Support chat: user's thread with support (supportChats/{userId}/messages)
+    // Support chat (legacy): supportChats/{userId}/messages — kept for backward compatibility
     match /supportChats/{userId} {
       allow read, write: if isOwner(userId) || isAdmin();
       match /messages/{messageId} {
         allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Support threads: support_threads/{threadId} and messages (senderUid, senderRole, text, createdAt)
+    // threadId is the user's uid (one thread per user with support)
+    match /support_threads/{threadId} {
+      allow read, write: if isOwner(threadId) || isAdmin();
+      match /messages/{messageId} {
+        allow read, write: if isOwner(threadId) || isAdmin();
       }
     }
     

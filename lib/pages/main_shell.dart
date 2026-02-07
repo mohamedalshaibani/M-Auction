@@ -5,6 +5,7 @@ import 'wallet_page.dart';
 import 'profile_page.dart';
 import 'more_page.dart';
 import '../theme/app_theme.dart';
+import '../services/push_notification_service.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -15,6 +16,12 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    PushNotificationService().initialize();
+  }
 
   List<Widget> get _pages => [
     const HomePage(),

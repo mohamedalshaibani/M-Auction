@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../models/category_model.dart';
+import '../models/profile_avatar.dart';
 import '../models/watch_brand.dart';
 import '../services/auction_service.dart';
 import '../services/bid_eligibility_service.dart';
@@ -1233,9 +1234,10 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                         .get()
                                         .then(
                                           (doc) =>
-                                              doc.data()?['displayName']
-                                                  as String? ??
-                                              'N/A',
+                                              getPublicDisplayName(
+                                                doc.data() as Map<String, dynamic>?,
+                                                fallback: 'Seller',
+                                              ),
                                         ),
                                   ]).then(
                                     (results) => {
@@ -1546,8 +1548,10 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                                       .get()
                                       .then(
                                         (doc) =>
-                                            doc.data()?['displayName'] as String? ??
-                                            'N/A',
+                                            getPublicDisplayName(
+                                              doc.data() as Map<String, dynamic>?,
+                                              fallback: 'Buyer',
+                                            ),
                                       ),
                                 ]).then(
                                   (results) => {

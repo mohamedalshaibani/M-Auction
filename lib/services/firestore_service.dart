@@ -12,10 +12,12 @@ class FirestoreService {
     required String uid,
     required String displayName,
     required String phoneNumber,
+    String? nickname,
+    String? avatarId,
   }) async {
     final batch = _firestore.batch();
 
-    // Create user document
+    // Create user document (displayName = real name, internal; nickname = public identity)
     final userRef = _firestore.collection('users').doc(uid);
     batch.set(userRef, {
       'displayName': displayName,
@@ -27,6 +29,8 @@ class FirestoreService {
       'createdAt': FieldValue.serverTimestamp(),
       'phoneVerified': true,
       'phoneVerifiedAt': FieldValue.serverTimestamp(),
+      if (nickname != null && nickname.trim().isNotEmpty) 'nickname': nickname.trim(),
+      'avatarId': avatarId?.trim().isNotEmpty == true ? avatarId!.trim() : '0',
     });
 
     // Create wallet document
@@ -164,6 +168,19 @@ class FirestoreService {
   // Get user document
   Future<DocumentSnapshot> getUser(String uid) async {
     return await _firestore.collection('users').doc(uid).get();
+  }
+
+  /// Update public profile (nickname and/or avatar). Allowed by Firestore rules for owner.
+  Future<void> updateUserProfile({
+    required String uid,
+    String? nickname,
+    String? avatarId,
+  }) async {
+    final updates = <String, dynamic>{};
+    if (nickname != null) updates['nickname'] = nickname.trim();
+    if (avatarId != null) updates['avatarId'] = avatarId.trim().isEmpty ? '0' : avatarId.trim();
+    if (updates.isEmpty) return;
+    await _firestore.collection('users').doc(uid).update(updates);
   }
 
   // Increment strike count

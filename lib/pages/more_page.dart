@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
+import '../services/firestore_service.dart';
 import '../widgets/unified_app_bar.dart';
+import '../widgets/admin_support_badge.dart';
 import 'about_app_page.dart';
 import 'contact_us_page.dart';
 import 'terms_conditions_page.dart';
@@ -22,6 +25,7 @@ class MorePage extends StatefulWidget {
 class _MorePageState extends State<MorePage> {
   String _version = '—';
   String _buildNumber = '—';
+  bool _isAdmin = false;
 
   static const String _appStoreUrl = 'https://apps.apple.com/app/id123456789'; // Placeholder
   static const String _shareText = 'Check out M Auction – premium auctions.';
@@ -30,6 +34,16 @@ class _MorePageState extends State<MorePage> {
   void initState() {
     super.initState();
     _loadVersion();
+    _loadAdminStatus();
+  }
+
+  Future<void> _loadAdminStatus() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final doc = await FirestoreService().getUser(user.uid);
+    final data = doc.data() as Map<String, dynamic>?;
+    final role = data?['role'] as String?;
+    if (mounted) setState(() => _isAdmin = role == 'admin');
   }
 
   Future<void> _loadVersion() async {
@@ -74,7 +88,10 @@ class _MorePageState extends State<MorePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
-      appBar: const UnifiedAppBar(title: 'More'),
+      appBar: const UnifiedAppBar(
+        title: 'More',
+        actions: [AdminSupportBadge()],
+      ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         children: [
@@ -127,16 +144,18 @@ class _MorePageState extends State<MorePage> {
               MaterialPageRoute(builder: (_) => const LiveChatPage()),
             ),
           ),
-          const SizedBox(height: 12),
-          _MoreTile(
-            icon: Icons.campaign_outlined,
-            title: 'Request an Ad',
-            subtitle: 'Partner advertising',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const RequestAdPage()),
+          if (!_isAdmin) ...[
+            const SizedBox(height: 12),
+            _MoreTile(
+              icon: Icons.campaign_outlined,
+              title: 'Request an Ad',
+              subtitle: 'Partner advertising',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RequestAdPage()),
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 12),
           _MoreTile(
             icon: Icons.share_outlined,

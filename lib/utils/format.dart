@@ -41,6 +41,17 @@ String formatTimeLeftCompact(dynamic endsAt) {
   return 'Ending soon';
 }
 
+/// Relative time string (e.g. "2 min ago", "1 hour ago").
+String relativeTime(DateTime dateTime) {
+  final now = DateTime.now();
+  final diff = now.difference(dateTime);
+  if (diff.inDays > 0) return '${diff.inDays}d ago';
+  if (diff.inHours > 0) return '${diff.inHours}h ago';
+  if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+  if (diff.inSeconds > 0) return '${diff.inSeconds}s ago';
+  return 'Just now';
+}
+
 /// True only when auction is ACTIVE and not yet ended by time.
 /// Use to hide ENDED / ended-by-time auctions from public lists (Home, Explore, Categories).
 bool isAuctionOpenForPublicBrowsing(Map<String, dynamic> data) {

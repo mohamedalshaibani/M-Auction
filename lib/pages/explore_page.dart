@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/header_logo.dart';
 import '../widgets/unified_app_bar.dart';
+import '../widgets/admin_support_badge.dart';
 import '../widgets/watch_brand_picker.dart';
 
 class ExplorePage extends StatefulWidget {
@@ -78,7 +79,10 @@ class _ExplorePageState extends State<ExplorePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const UnifiedAppBar(titleWidget: HeaderLogo()),
+      appBar: const UnifiedAppBar(
+        titleWidget: HeaderLogo(),
+        actions: [AdminSupportBadge()],
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

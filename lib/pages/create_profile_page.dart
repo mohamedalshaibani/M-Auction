@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import '../models/profile_avatar.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
@@ -17,14 +19,25 @@ class CreateProfilePage extends StatefulWidget {
 
 class _CreateProfilePageState extends State<CreateProfilePage> {
   final _displayNameController = TextEditingController();
+  final _nicknameController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _firestoreService = FirestoreService();
   bool _isSaving = false;
   String? _errorMessage;
+  late String _selectedAvatarId;
+
+  @override
+  void initState() {
+    super.initState();
+    // Suggested avatar: pick one at random on first load (user can change).
+    final random = DateTime.now().millisecondsSinceEpoch % kProfileAvatars.length;
+    _selectedAvatarId = kProfileAvatars[random].id;
+  }
 
   @override
   void dispose() {
     _displayNameController.dispose();
+    _nicknameController.dispose();
     super.dispose();
   }
 
@@ -42,6 +55,7 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
     }
 
     final displayName = _displayNameController.text.trim();
+    final nickname = _nicknameController.text.trim();
 
     setState(() {
       _isSaving = true;
@@ -53,6 +67,8 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
         uid: user.uid,
         displayName: displayName,
         phoneNumber: user.phoneNumber ?? '',
+        nickname: nickname.isEmpty ? null : nickname,
+        avatarId: _selectedAvatarId,
       );
 
       if (mounted) {
@@ -68,10 +84,14 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
           Navigator.of(context).pushReplacementNamed('/home');
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
+        debugPrint('Create profile error: $e');
+        debugPrint(stackTrace.toString());
         setState(() {
-          _errorMessage = 'Error creating profile. Please try again.';
+          _errorMessage = e is FirebaseException
+              ? (e.message ?? 'Error creating profile. Please try again.')
+              : 'Error creating profile. Please try again.';
           _isSaving = false;
         });
       }
@@ -142,18 +162,18 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                       ),
                       const SizedBox(height: 32),
                       
-                      // Display name input
+                      // Full name (private, internal only)
                       TextFormField(
                         controller: _displayNameController,
                         enabled: !_isSaving,
                         decoration: const InputDecoration(
-                          labelText: 'Display Name',
-                          hintText: 'Enter your name',
+                          labelText: 'Your name',
+                          hintText: 'e.g. Ahmed',
                           prefixIcon: Icon(Icons.person_outline),
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Please enter your display name';
+                            return 'Please enter your name';
                           }
                           if (value.trim().length < 2) {
                             return 'Name must be at least 2 characters';
@@ -161,7 +181,78 @@ class _CreateProfilePageState extends State<CreateProfilePage> {
                           return null;
                         },
                       ),
-                      
+                      const SizedBox(height: 8),
+                      Text(
+                        'Your real name is required for legal and support purposes only.\nIt will never be shown publicly.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Public nickname (optional)
+                      TextFormField(
+                        controller: _nicknameController,
+                        enabled: !_isSaving,
+                        decoration: const InputDecoration(
+                          labelText: 'Public nickname (optional)',
+                          hintText: 'e.g. Collector — shown in bids & wins',
+                          prefixIcon: Icon(Icons.badge_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Avatar
+                      Row(
+                        children: [
+                          Text(
+                            'Choose an avatar',
+                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                  color: AppTheme.textPrimary,
+                                ),
+                          ),
+                          const SizedBox(width: 12),
+                          TextButton.icon(
+                            onPressed: () {
+                              final random = DateTime.now().millisecondsSinceEpoch % kProfileAvatars.length;
+                              setState(() => _selectedAvatarId = kProfileAvatars[random].id);
+                            },
+                            icon: const Icon(Icons.shuffle, size: 18),
+                            label: const Text('Random avatar'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: kProfileAvatars.map((a) {
+                          final selected = a.id == _selectedAvatarId;
+                          return GestureDetector(
+                            onTap: () => setState(() => _selectedAvatarId = a.id),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: selected
+                                    ? AppTheme.primaryBlue.withValues(alpha: 0.15)
+                                    : AppTheme.primaryLight.withValues(alpha: 0.5),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: selected ? AppTheme.primaryBlue : AppTheme.border,
+                                  width: selected ? 2 : 1,
+                                ),
+                              ),
+                              child: Icon(
+                                a.icon,
+                                size: 24,
+                                color: selected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
                       // Error message
                       if (_errorMessage != null) ...[
                         const SizedBox(height: 16),

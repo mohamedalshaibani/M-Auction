@@ -5,7 +5,8 @@ import '../widgets/unified_app_bar.dart';
 import '../services/listing_eligibility_service.dart';
 import 'listing_flow_gate_page.dart';
 
-/// Required step in listing flow: add and verify email (Firebase email link).
+/// Email verification step: send link via Firebase [User.verifyBeforeUpdateEmail].
+/// Link is single-use and time-limited; users can request a new link if they see "expired or already used".
 /// When [returnAfterVerify] is true (e.g. from bidding flow), pop after verification instead of pushing ListingFlowGatePage.
 class EmailVerificationPage extends StatefulWidget {
   const EmailVerificationPage({
@@ -16,7 +17,6 @@ class EmailVerificationPage extends StatefulWidget {
   });
   final bool returnAfterVerify;
   final String? returnAuctionId;
-  /// When true, user came from Create Auction listing flow; show Cancel, return to Home on cancel.
   final bool returnToListing;
 
   @override
@@ -29,6 +29,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
   final _eligibility = ListingEligibilityService();
   bool _sending = false;
   bool _sent = false;
+  bool _resendSuccess = false;
   String? _error;
 
   @override
@@ -53,7 +54,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     super.dispose();
   }
 
-  Future<void> _sendVerification() async {
+  Future<void> _sendVerification({bool isResend = false}) async {
     if (!_formKey.currentState!.validate()) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -64,7 +65,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     setState(() {
       _sending = true;
       _error = null;
-      _sent = false;
+      if (!isResend) _resendSuccess = false;
     });
     try {
       await user.verifyBeforeUpdateEmail(email);
@@ -74,29 +75,30 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
           _sending = false;
           _sent = true;
           _error = null;
+          _resendSuccess = isResend;
         });
       }
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
-        if (mounted) {
-          setState(() {
-            _sending = false;
-            _error = 'For security, please sign out and sign in again, then try verifying your email.';
-          });
-        }
-        return;
-      }
       if (mounted) {
-        setState(() {
-          _sending = false;
-          _error = e.message ?? e.code;
-        });
+        setState(() => _sending = false);
+        switch (e.code) {
+          case 'requires-recent-login':
+            setState(() => _error =
+                'For security, please sign out and sign in again, then try verifying your email.');
+            return;
+          case 'too-many-requests':
+            setState(() => _error =
+                'Too many attempts. Please wait a few minutes before requesting another link.');
+            return;
+          default:
+            setState(() => _error = e.message ?? e.code);
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _sending = false;
-          _error = e.toString();
+          _error = 'Something went wrong. Please try again.';
         });
       }
     }
@@ -107,36 +109,70 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     if (user == null) return;
     setState(() => _error = null);
     try {
+      // Reload user so we get the latest emailVerified from the server (set when they clicked the link).
       await user.reload();
-      final updated = FirebaseAuth.instance.currentUser;
+      // Use the same user reference; reload() updates it in place.
+      User? updated = FirebaseAuth.instance.currentUser;
+      if (updated?.emailVerified != true) {
+        // Server can take a moment to propagate; retry once after a short delay.
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        await user.reload();
+        updated = FirebaseAuth.instance.currentUser;
+      }
       if (updated?.emailVerified == true) {
         await _eligibility.setEmailVerified(user.uid);
         if (!mounted) return;
         if (widget.returnAfterVerify) {
           if (widget.returnAuctionId != null) {
             Navigator.of(context).popUntil((r) => r.isFirst);
-            Navigator.of(context).pushNamed('/auctionDetail?auctionId=${widget.returnAuctionId}');
+            Navigator.of(context).pushNamed(
+                '/auctionDetail?auctionId=${widget.returnAuctionId}');
           } else {
             Navigator.of(context).pop();
           }
         } else {
           Navigator.of(context).pop();
           Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ListingFlowGatePage()),
+            MaterialPageRoute<void>(
+                builder: (_) => const ListingFlowGatePage()),
           );
         }
       } else {
-        setState(() => _error = 'Email not verified yet. Open the link we sent to ${updated?.email ?? _emailController.text} and try again.');
+        if (mounted) {
+          setState(() => _error =
+              'Not verified yet. Open the link in your email (check Spam/Junk), then tap Continue. If the link says "expired or already used", tap "Send new link" below.');
+        }
       }
-    } catch (e) {
-      setState(() => _error = e.toString());
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() {
+          switch (e.code) {
+            case 'requires-recent-login':
+              _error = 'For security, please sign out and sign in again, then tap Continue.';
+              break;
+            case 'network-request-failed':
+              _error = 'No connection. Check your network and try again.';
+              break;
+            default:
+              _error = e.message ?? 'Could not check verification. Please try again.';
+          }
+        });
+      }
+      debugPrint('Email verification check (Auth): ${e.code} - ${e.message}');
+    } catch (e, stack) {
+      debugPrint('Email verification check error: $e');
+      debugPrint(stack.toString());
+      if (mounted) {
+        setState(() => _error = 'Could not check verification. Please try again.');
+      }
     }
   }
 
   void _onCancel() {
     if (widget.returnAuctionId != null) {
       Navigator.of(context).popUntil(
-          (Route<dynamic> r) => r.settings.name?.startsWith('/auctionDetail') == true);
+          (Route<dynamic> r) =>
+              r.settings.name?.startsWith('/auctionDetail') == true);
     } else if (widget.returnToListing) {
       Navigator.of(context).popUntil((Route<dynamic> r) => r.isFirst);
     } else {
@@ -146,7 +182,8 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final showCancel = widget.returnAuctionId != null || widget.returnToListing;
+    final showCancel =
+        widget.returnAuctionId != null || widget.returnToListing;
     return Scaffold(
       appBar: UnifiedAppBar(
         title: 'Verify Email',
@@ -162,15 +199,31 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'To list items you must add and verify your email address.',
+                'To list or bid you must add and verify your email address.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textSecondary,
-                    ),
+                    color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryLight.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  'The verification link is for one-time use and expires after a few days. '
+                  'Open the link only once (e.g. copy link and paste in your browser, or use a private/incognito window) so your email provider doesn\'t use it first. '
+                  'If you see "expired or already used", tap "Send new link" below. Check Spam or Junk if you don\'t see the email.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textPrimary, height: 1.4),
+                ),
               ),
               const SizedBox(height: 24),
               TextFormField(
                 controller: _emailController,
-                enabled: !_sending && !_sent,
+                enabled: !_sending,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
                   labelText: 'Email address',
@@ -185,15 +238,33 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 16),
-                Text(
-                  _error!,
-                  style: TextStyle(color: AppTheme.error, fontSize: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.error_outline, color: AppTheme.error, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppTheme.error),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
               const SizedBox(height: 24),
               if (!_sent) ...[
                 FilledButton(
-                  onPressed: _sending ? null : _sendVerification,
+                  onPressed: _sending ? null : () => _sendVerification(isResend: false),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppTheme.primaryBlue,
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -214,21 +285,60 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppTheme.success),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.mail_outline, color: AppTheme.success),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'We sent a verification link to ${_emailController.text}. Open the link in your email, then tap below.',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppTheme.textPrimary,
-                              ),
-                        ),
+                      Row(
+                        children: [
+                          Icon(Icons.mark_email_read_outlined,
+                              color: AppTheme.success, size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Link sent to ${_emailController.text}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Open the link in that email (check Spam/Junk if needed), then tap "I\'ve verified – Continue" below.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppTheme.textPrimary, height: 1.4),
                       ),
                     ],
                   ),
                 ),
+                if (_resendSuccess) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle_outline,
+                            color: AppTheme.success, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'New link sent. Use the link in the latest email; the previous link no longer works.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppTheme.textPrimary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: _checkVerifiedAndContinue,
@@ -237,6 +347,23 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   child: const Text('I\'ve verified my email – Continue'),
+                ),
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: _sending
+                      ? null
+                      : () => _sendVerification(isResend: true),
+                  icon: _sending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh, size: 20),
+                  label: Text(
+                    _sending ? 'Sending…' : 'Link expired or already used? Send new link',
+                    style: TextStyle(color: AppTheme.primaryBlue),
+                  ),
                 ),
               ],
             ],

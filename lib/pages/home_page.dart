@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/header_logo.dart';
 import '../widgets/unified_app_bar.dart';
+import '../widgets/admin_support_badge.dart';
 import '../widgets/watch_brand_picker.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
@@ -98,7 +99,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const UnifiedAppBar(titleWidget: HeaderLogo()),
+      appBar: const UnifiedAppBar(
+        titleWidget: HeaderLogo(),
+        actions: [AdminSupportBadge()],
+      ),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
