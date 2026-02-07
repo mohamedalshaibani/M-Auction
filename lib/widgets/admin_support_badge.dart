@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/firestore_service.dart';
 import '../utils/support_unread.dart';
 import '../pages/admin_panel_page.dart';
 
@@ -15,16 +14,6 @@ class AdminSupportBadge extends StatefulWidget {
 
 class _AdminSupportBadgeState extends State<AdminSupportBadge> {
   final _firestore = FirebaseFirestore.instance;
-  final _firestoreService = FirestoreService();
-
-  Future<bool> _isAdmin() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return false;
-    final doc = await _firestoreService.getUser(user.uid);
-    final data = doc.data() as Map<String, dynamic>?;
-    final role = data?['role'] as String?;
-    return role == 'admin';
-  }
 
   int _countUnread(List<QueryDocumentSnapshot> docs) {
     int count = 0;
@@ -37,12 +26,14 @@ class _AdminSupportBadgeState extends State<AdminSupportBadge> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _isAdmin(),
-      builder: (context, adminSnap) {
-        if (!adminSnap.hasData || adminSnap.data != true) {
-          return const SizedBox.shrink();
-        }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _firestore.collection('users').doc(user.uid).snapshots(),
+      builder: (context, userSnap) {
+        final userData = userSnap.data?.data() as Map<String, dynamic>?;
+        final role = userData?['role'] as String?;
+        if (role != 'admin') return const SizedBox.shrink();
         return StreamBuilder<QuerySnapshot>(
           stream: _firestore.collection('support_threads').snapshots(),
           builder: (context, snapshot) {

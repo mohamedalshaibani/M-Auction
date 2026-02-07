@@ -46,3 +46,12 @@ bool userHasUnread(Map<String, dynamic>? data) {
   final lastRead = parseTimestamp(data[kLastUserReadAt]);
   return lastRead == null || lastAdmin.compareTo(lastRead) > 0;
 }
+
+/// Timestamp for sorting threads (newest first).
+/// Uses lastUserMessageAt ?? lastMessageFromUserAt ?? updatedAt.
+Timestamp? getSortTimestamp(Map<String, dynamic>? data) {
+  if (data == null) return null;
+  return parseTimestamp(
+    data[kLastUserMessageAt] ?? data[kLegacyLastMessageFromUserAt] ?? data['updatedAt'],
+  );
+}

@@ -1084,10 +1084,8 @@ class _AdminPanelPageState extends State<AdminPanelPage>
         }
         final sorted = List<QueryDocumentSnapshot>.from(docs)
           ..sort((a, b) {
-            final aData = a.data() as Map<String, dynamic>?;
-            final bData = b.data() as Map<String, dynamic>?;
-            final aT = (aData?['lastUserMessageAt'] ?? aData?['lastMessageFromUserAt'] ?? aData?['updatedAt']) as Timestamp?;
-            final bT = (bData?['lastUserMessageAt'] ?? bData?['lastMessageFromUserAt'] ?? bData?['updatedAt']) as Timestamp?;
+            final aT = getSortTimestamp(a.data() as Map<String, dynamic>?);
+            final bT = getSortTimestamp(b.data() as Map<String, dynamic>?);
             if (aT == null && bT == null) return 0;
             if (aT == null) return 1;
             if (bT == null) return -1;
