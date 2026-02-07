@@ -173,33 +173,72 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           );
         }
         
-        return Scaffold(
-          appBar: UnifiedAppBar(
-            title: 'Admin Panel',
-            bottom: TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: 'Auctions'),
-                Tab(text: 'Deposits'),
-                Tab(text: 'KYC Requests'),
-                Tab(text: 'Revenue'),
-                Tab(text: 'Ads'),
-                Tab(text: 'Support'),
-              ],
-            ),
-          ),
+        return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('support_threads')
+                .snapshots(),
+            builder: (context, snap) {
+              final docs = snap.data?.docs ?? [];
+              int adminUnread = 0;
+              for (final d in docs) {
+                final data = d.data() as Map<String, dynamic>? ?? {};
+                final lastUser =
+                    (data['lastUserMessageAt'] ?? data['lastMessageFromUserAt'])
+                        as Timestamp?;
+                final lastRead = data['lastAdminReadAt'] as Timestamp?;
+                if (lastUser != null &&
+                    (lastRead == null || lastUser.compareTo(lastRead) > 0)) {
+                  adminUnread++;
+                }
+              }
+              final supportHasUnread = adminUnread > 0;
+              return Scaffold(
+                appBar: UnifiedAppBar(
+                  title: 'Admin Panel',
+                  bottom: TabBar(
+                    controller: _tabController,
+                    tabs: [
+                      const Tab(text: 'Auctions'),
+                      const Tab(text: 'Deposits'),
+                      const Tab(text: 'KYC Requests'),
+                      const Tab(text: 'Revenue'),
+                      const Tab(text: 'Ads'),
+                      Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Support'),
+                            if (supportHasUnread) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
           body: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildAuctionsTab(),
-              _buildDepositsTab(),
-              _buildKycTab(),
-              _buildRevenueTab(),
-              _buildAdsTab(),
-              _buildSupportTab(),
-            ],
-          ),
-        );
+                    controller: _tabController,
+                    children: [
+                      _buildAuctionsTab(),
+                      _buildDepositsTab(),
+                      _buildKycTab(),
+                      _buildRevenueTab(),
+                      _buildAdsTab(),
+                      _buildSupportTab(),
+                    ],
+                  ),
+                );
+              },
+            );
       },
     );
   }
@@ -1053,8 +1092,8 @@ class _AdminPanelPageState extends State<AdminPanelPage>
           ..sort((a, b) {
             final aData = a.data() as Map<String, dynamic>?;
             final bData = b.data() as Map<String, dynamic>?;
-            final aT = (aData?['lastMessageFromUserAt'] ?? aData?['updatedAt']) as Timestamp?;
-            final bT = (bData?['lastMessageFromUserAt'] ?? bData?['updatedAt']) as Timestamp?;
+            final aT = (aData?['lastUserMessageAt'] ?? aData?['lastMessageFromUserAt'] ?? aData?['updatedAt']) as Timestamp?;
+            final bT = (bData?['lastUserMessageAt'] ?? bData?['lastMessageFromUserAt'] ?? bData?['updatedAt']) as Timestamp?;
             if (aT == null && bT == null) return 0;
             if (aT == null) return 1;
             if (bT == null) return -1;
@@ -1068,7 +1107,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
             final threadId = doc.id;
             final data = doc.data() as Map<String, dynamic>?;
             final updatedAt = data?['updatedAt'] as Timestamp?;
-            final lastUser = data?['lastMessageFromUserAt'] as Timestamp?;
+            final lastUser = (data?['lastUserMessageAt'] ?? data?['lastMessageFromUserAt']) as Timestamp?;
             final lastRead = data?['lastAdminReadAt'] as Timestamp?;
             final unread = lastUser != null && (lastRead == null || lastUser.compareTo(lastRead) > 0);
             return Card(

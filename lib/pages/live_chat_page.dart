@@ -18,6 +18,33 @@ class _LiveChatPageState extends State<LiveChatPage> {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isSending = false;
+  bool _hasMarkedRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _markUserRead();
+  }
+
+  Future<void> _markUserRead() async {
+    if (_hasMarkedRead) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    _hasMarkedRead = true;
+    try {
+      await FirebaseFirestore.instance
+          .collection('support_threads')
+          .doc(user.uid)
+          .set(
+            {
+              'userId': user.uid,
+              'lastUserReadAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -42,7 +69,7 @@ class _LiveChatPageState extends State<LiveChatPage> {
       await threadRef.set({
         'userId': user.uid,
         'updatedAt': now,
-        'lastMessageFromUserAt': now,
+        'lastUserMessageAt': now,
       }, SetOptions(merge: true));
       await threadRef.collection('messages').add({
         'senderUid': user.uid,
@@ -50,7 +77,7 @@ class _LiveChatPageState extends State<LiveChatPage> {
         'text': text,
         'createdAt': now,
       });
-      await threadRef.update({'updatedAt': now, 'lastMessageFromUserAt': now});
+      await threadRef.update({'updatedAt': now, 'lastUserMessageAt': now});
       _textController.clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {

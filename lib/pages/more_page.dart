@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
@@ -135,7 +136,7 @@ class _MorePageState extends State<MorePage> {
             ),
           ),
           const SizedBox(height: 12),
-          _MoreTile(
+          _MoreTileWithSupportBadge(
             icon: Icons.chat_bubble_outline,
             title: 'Live Chat',
             subtitle: 'Chat with support',
@@ -179,17 +180,70 @@ class _MorePageState extends State<MorePage> {
   }
 }
 
+class _MoreTileWithSupportBadge extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _MoreTileWithSupportBadge({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    return StreamBuilder<DocumentSnapshot>(
+      stream: user != null
+          ? FirebaseFirestore.instance
+              .collection('support_threads')
+              .doc(user.uid)
+              .snapshots()
+          : Stream<DocumentSnapshot>.empty(),
+      builder: (context, snap) {
+        final hasUnread = user != null &&
+            snap.hasData &&
+            snap.data!.exists &&
+            _isUnread(snap.data!.data());
+        return _MoreTile(
+          icon: icon,
+          title: title,
+          subtitle: subtitle,
+          onTap: onTap,
+          showBadge: hasUnread,
+        );
+      },
+    );
+  }
+
+  static bool _isUnread(Object? data) {
+    if (data == null || data is! Map<String, dynamic>) return false;
+    final lastAdmin = data['lastAdminMessageAt'];
+    if (lastAdmin == null) return false;
+    final lastRead = data['lastUserReadAt'];
+    if (lastRead == null) return true;
+    return lastAdmin is Timestamp &&
+        lastRead is Timestamp &&
+        lastAdmin.compareTo(lastRead) > 0;
+  }
+}
+
 class _MoreTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool showBadge;
 
   const _MoreTile({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.showBadge = false,
   });
 
   @override
@@ -208,7 +262,25 @@ class _MoreTile extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, size: 24, color: AppTheme.primaryBlue),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(icon, size: 24, color: AppTheme.primaryBlue),
+                  if (showBadge)
+                    Positioned(
+                      top: -2,
+                      right: -2,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(

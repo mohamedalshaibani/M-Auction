@@ -29,7 +29,7 @@ class _AdminSupportBadgeState extends State<AdminSupportBadge> {
     int count = 0;
     for (final doc in docs) {
       final d = doc.data() as Map<String, dynamic>? ?? {};
-      final lastUser = d['lastMessageFromUserAt'] as Timestamp?;
+      final lastUser = (d['lastUserMessageAt'] ?? d['lastMessageFromUserAt']) as Timestamp?;
       final lastRead = d['lastAdminReadAt'] as Timestamp?;
       if (lastUser != null && (lastRead == null || lastUser.compareTo(lastRead) > 0)) {
         count++;

@@ -61,7 +61,10 @@ class _AdminSupportThreadPageState extends State<AdminSupportThreadPage> {
         'text': text,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      await threadRef.update({'updatedAt': FieldValue.serverTimestamp()});
+      await threadRef.update({
+        'updatedAt': FieldValue.serverTimestamp(),
+        'lastAdminMessageAt': FieldValue.serverTimestamp(),
+      });
       _textController.clear();
       if (_scrollController.hasClients) {
         _scrollController.animateTo(

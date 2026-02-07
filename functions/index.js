@@ -1396,6 +1396,10 @@ exports.onSupportMessageCreated = functions
         });
         console.log('Sent support push to admins topic, threadId:', threadId);
       } else if (senderRole === 'admin') {
+        await db.collection('support_threads').doc(threadId).update({
+          lastAdminMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
         const userDoc = await db.collection('users').doc(threadId).get();
         const fcmToken = userDoc.data()?.fcmToken;
         if (fcmToken) {
@@ -1405,7 +1409,7 @@ exports.onSupportMessageCreated = functions
               title: 'Support reply',
               body: preview || 'New reply from support',
             },
-            data: { threadId, type: 'support_message' },
+            data: { threadId, type: 'support_reply' },
             android: { priority: 'high' },
             apns: {
               payload: { aps: { sound: 'default', badge: 1 } },
