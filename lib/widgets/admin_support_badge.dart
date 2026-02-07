@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
+import '../utils/support_unread.dart';
 import '../pages/admin_panel_page.dart';
 
 /// Support icon with unread badge for admins. Shows in app bar; navigates to Admin Panel Support tab.
@@ -28,12 +29,8 @@ class _AdminSupportBadgeState extends State<AdminSupportBadge> {
   int _countUnread(List<QueryDocumentSnapshot> docs) {
     int count = 0;
     for (final doc in docs) {
-      final d = doc.data() as Map<String, dynamic>? ?? {};
-      final lastUser = (d['lastUserMessageAt'] ?? d['lastMessageFromUserAt']) as Timestamp?;
-      final lastRead = d['lastAdminReadAt'] as Timestamp?;
-      if (lastUser != null && (lastRead == null || lastUser.compareTo(lastRead) > 0)) {
-        count++;
-      }
+      final d = doc.data() as Map<String, dynamic>?;
+      if (adminHasUnread(d)) count++;
     }
     return count;
   }

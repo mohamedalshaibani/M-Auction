@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/support_unread.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
@@ -204,10 +205,12 @@ class _MoreTileWithSupportBadge extends StatelessWidget {
               .snapshots()
           : Stream<DocumentSnapshot>.empty(),
       builder: (context, snap) {
+        final data = snap.data?.data();
         final hasUnread = user != null &&
             snap.hasData &&
             snap.data!.exists &&
-            _isUnread(snap.data!.data());
+            data is Map<String, dynamic> &&
+            userHasUnread(data);
         return _MoreTile(
           icon: icon,
           title: title,
@@ -219,17 +222,7 @@ class _MoreTileWithSupportBadge extends StatelessWidget {
     );
   }
 
-  static bool _isUnread(Object? data) {
-    if (data == null || data is! Map<String, dynamic>) return false;
-    final lastAdmin = data['lastAdminMessageAt'];
-    if (lastAdmin == null) return false;
-    final lastRead = data['lastUserReadAt'];
-    if (lastRead == null) return true;
-    return lastAdmin is Timestamp &&
-        lastRead is Timestamp &&
-        lastAdmin.compareTo(lastRead) > 0;
   }
-}
 
 class _MoreTile extends StatelessWidget {
   final IconData icon;

@@ -66,18 +66,24 @@ class _LiveChatPageState extends State<LiveChatPage> {
           .doc(user.uid);
       // Ensure thread exists (for Cloud Function / admin listing)
       final now = FieldValue.serverTimestamp();
-      await threadRef.set({
-        'userId': user.uid,
-        'updatedAt': now,
-        'lastUserMessageAt': now,
-      }, SetOptions(merge: true));
+      await threadRef.set(
+        {
+          'userId': user.uid,
+          'updatedAt': now,
+          'lastUserMessageAt': now,
+        },
+        SetOptions(merge: true),
+      );
       await threadRef.collection('messages').add({
         'senderUid': user.uid,
         'senderRole': 'user',
         'text': text,
         'createdAt': now,
       });
-      await threadRef.update({'updatedAt': now, 'lastUserMessageAt': now});
+      await threadRef.set(
+        {'updatedAt': now, 'lastUserMessageAt': now},
+        SetOptions(merge: true),
+      );
       _textController.clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {

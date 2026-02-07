@@ -1396,10 +1396,10 @@ exports.onSupportMessageCreated = functions
         });
         console.log('Sent support push to admins topic, threadId:', threadId);
       } else if (senderRole === 'admin') {
-        await db.collection('support_threads').doc(threadId).update({
+        await db.collection('support_threads').doc(threadId).set({
           lastAdminMessageAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        }, { merge: true });
         const userDoc = await db.collection('users').doc(threadId).get();
         const fcmToken = userDoc.data()?.fcmToken;
         if (fcmToken) {

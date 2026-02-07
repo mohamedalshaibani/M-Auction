@@ -9,6 +9,7 @@ import '../services/ads_service.dart';
 import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
+import '../utils/support_unread.dart';
 import '../widgets/unified_app_bar.dart';
 import 'admin_support_thread_page.dart';
 
@@ -181,15 +182,8 @@ class _AdminPanelPageState extends State<AdminPanelPage>
               final docs = snap.data?.docs ?? [];
               int adminUnread = 0;
               for (final d in docs) {
-                final data = d.data() as Map<String, dynamic>? ?? {};
-                final lastUser =
-                    (data['lastUserMessageAt'] ?? data['lastMessageFromUserAt'])
-                        as Timestamp?;
-                final lastRead = data['lastAdminReadAt'] as Timestamp?;
-                if (lastUser != null &&
-                    (lastRead == null || lastUser.compareTo(lastRead) > 0)) {
-                  adminUnread++;
-                }
+                final data = d.data() as Map<String, dynamic>?;
+                if (adminHasUnread(data)) adminUnread++;
               }
               final supportHasUnread = adminUnread > 0;
               return Scaffold(
@@ -1107,9 +1101,7 @@ class _AdminPanelPageState extends State<AdminPanelPage>
             final threadId = doc.id;
             final data = doc.data() as Map<String, dynamic>?;
             final updatedAt = data?['updatedAt'] as Timestamp?;
-            final lastUser = (data?['lastUserMessageAt'] ?? data?['lastMessageFromUserAt']) as Timestamp?;
-            final lastRead = data?['lastAdminReadAt'] as Timestamp?;
-            final unread = lastUser != null && (lastRead == null || lastUser.compareTo(lastRead) > 0);
+            final unread = adminHasUnread(data);
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(

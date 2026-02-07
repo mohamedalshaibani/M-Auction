@@ -33,7 +33,13 @@ class _AdminSupportThreadPageState extends State<AdminSupportThreadPage> {
       await FirebaseFirestore.instance
           .collection('support_threads')
           .doc(widget.threadId)
-          .update({'lastAdminReadAt': FieldValue.serverTimestamp()});
+          .set(
+            {
+              'lastAdminReadAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
     } catch (_) {}
   }
 
@@ -61,10 +67,13 @@ class _AdminSupportThreadPageState extends State<AdminSupportThreadPage> {
         'text': text,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      await threadRef.update({
-        'updatedAt': FieldValue.serverTimestamp(),
-        'lastAdminMessageAt': FieldValue.serverTimestamp(),
-      });
+      await threadRef.set(
+        {
+          'updatedAt': FieldValue.serverTimestamp(),
+          'lastAdminMessageAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
       _textController.clear();
       if (_scrollController.hasClients) {
         _scrollController.animateTo(

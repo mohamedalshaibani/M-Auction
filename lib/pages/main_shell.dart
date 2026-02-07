@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/support_unread.dart';
 import 'home_page.dart';
 import 'explore_page.dart';
 import 'wallet_page.dart';
@@ -49,22 +50,12 @@ class _MainShellState extends State<MainShell> {
                   .doc(user.uid)
                   .snapshots(),
               builder: (context, snap) {
-                final hasUnread = _userHasUnread(snap.data?.data());
+                final data = snap.data?.data();
+                final hasUnread = data is Map<String, dynamic> && userHasUnread(data);
                 return _buildNavBar(hasUnread);
               },
             ),
     );
-  }
-
-  bool _userHasUnread(Object? data) {
-    if (data == null || data is! Map<String, dynamic>) return false;
-    final lastAdmin = data['lastAdminMessageAt'];
-    if (lastAdmin == null) return false;
-    final lastRead = data['lastUserReadAt'];
-    if (lastRead == null) return true;
-    return lastAdmin is Timestamp &&
-        lastRead is Timestamp &&
-        lastAdmin.compareTo(lastRead) > 0;
   }
 
   Widget _buildNavBar(bool moreHasUnread) {
