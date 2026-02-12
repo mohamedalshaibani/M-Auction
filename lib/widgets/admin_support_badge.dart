@@ -33,7 +33,7 @@ class _AdminSupportBadgeState extends State<AdminSupportBadge> {
       builder: (context, userSnap) {
         final userData = userSnap.data?.data() as Map<String, dynamic>?;
         final role = userData?['role'] as String?;
-        if (role != 'admin') return const SizedBox.shrink();
+        if (role != 'admin' && role != 'super_admin') return const SizedBox.shrink();
         return StreamBuilder<QuerySnapshot>(
           stream: _firestore.collection('support_threads').snapshots(),
           builder: (context, snapshot) {

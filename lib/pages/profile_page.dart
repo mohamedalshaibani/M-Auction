@@ -120,6 +120,7 @@ class _ProfileBody extends StatelessWidget {
     final vipDepositWaived = userData['vipDepositWaived'] as bool? ?? false;
     final email = userData['email'] as String? ?? user.email;
     final emailVerified = userData['emailVerified'] as bool? ?? user.emailVerified;
+    final phoneNumber = user.phoneNumber ?? userData['phoneNumber'] as String?;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -141,6 +142,7 @@ class _ProfileBody extends StatelessWidget {
             kycStatus: kycStatus,
             emailVerified: emailVerified == true,
             email: email,
+            phoneNumber: phoneNumber,
           ),
           const SizedBox(height: 16),
 
@@ -164,7 +166,7 @@ class _ProfileBody extends StatelessWidget {
               ),
             ],
           ),
-          if (role == 'admin') ...[
+          if (role == 'admin' || role == 'super_admin') ...[
             const SizedBox(height: 16),
             _SectionHeader(title: 'Administration'),
             const SizedBox(height: 6),
@@ -497,14 +499,20 @@ class _VerificationSection extends StatelessWidget {
     required this.kycStatus,
     required this.emailVerified,
     this.email,
+    this.phoneNumber,
   });
 
   final String kycStatus;
   final bool emailVerified;
   final String? email;
+  final String? phoneNumber;
 
   @override
   Widget build(BuildContext context) {
+    final hasPhone = phoneNumber != null && phoneNumber!.trim().isNotEmpty;
+    final phoneValue = hasPhone ? phoneNumber!.trim() : null;
+    final emailValue = (email != null && email!.trim().isNotEmpty) ? email!.trim() : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -528,8 +536,19 @@ class _VerificationSection extends StatelessWidget {
           child: Column(
             children: [
               _VerificationRow(
+                icon: hasPhone ? Icons.check_circle : Icons.phone_outlined,
+                label: 'Phone number',
+                value: phoneValue,
+                status: hasPhone ? 'Verified' : 'Not added',
+                statusColor: hasPhone ? AppTheme.success : AppTheme.textTertiary,
+                onTap: !hasPhone ? () => Navigator.of(context).pushNamed('/login') : null,
+                actionLabel: !hasPhone ? 'Add' : null,
+              ),
+              const Divider(height: 12),
+              _VerificationRow(
                 icon: emailVerified ? Icons.check_circle : Icons.mail_outline,
                 label: 'Email',
+                value: emailValue,
                 status: emailVerified ? 'Verified' : 'Not verified',
                 statusColor: emailVerified ? AppTheme.success : AppTheme.textTertiary,
                 onTap: !emailVerified
@@ -541,6 +560,7 @@ class _VerificationSection extends StatelessWidget {
               _VerificationRow(
                 icon: _kycIcon(kycStatus),
                 label: 'Identity (KYC)',
+                value: null,
                 status: _kycStatusText(kycStatus),
                 statusColor: _kycColor(kycStatus),
                 onTap: (kycStatus == 'not_submitted' || kycStatus == 'rejected')
@@ -606,6 +626,7 @@ class _VerificationRow extends StatelessWidget {
     required this.label,
     required this.status,
     required this.statusColor,
+    this.value,
     this.onTap,
     this.actionLabel,
   });
@@ -614,16 +635,23 @@ class _VerificationRow extends StatelessWidget {
   final String label;
   final String status;
   final Color statusColor;
+  final String? value;
   final VoidCallback? onTap;
   final String? actionLabel;
+
+  static const double _valueLineHeight = 18;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: statusColor),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(icon, size: 20, color: statusColor),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -638,7 +666,23 @@ class _VerificationRow extends StatelessWidget {
                         fontSize: 13,
                       ),
                 ),
-                const SizedBox(height: 0),
+                SizedBox(
+                  height: _valueLineHeight,
+                  child: value != null && value!.isNotEmpty
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            value!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 12,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
                 Text(
                   status,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(

@@ -8,6 +8,7 @@ import '../services/kyc_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/countries.dart';
 import '../widgets/unified_app_bar.dart';
+import 'live_chat_page.dart';
 import 'dart:html' if (dart.library.io) '../web_stubs.dart' as html;
 
 class KycPage extends StatefulWidget {
@@ -243,8 +244,69 @@ class _KycPageState extends State<KycPage> {
     }
   }
 
+  Widget _buildUnderReviewContent() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.pending_actions, size: 28, color: AppTheme.warning),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Under review',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Your identity verification is under review. You'll be able to bid once it's approved. If it takes more than 24 hours, please contact support.",
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textPrimary,
+                        height: 1.4,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(builder: (_) => const LiveChatPage()),
+                    );
+                  },
+                  icon: const Icon(Icons.chat_bubble_outline, size: 20),
+                  label: const Text('Live Chat / Contact Support'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     return Scaffold(
       appBar: UnifiedAppBar(
         title: 'KYC Verification',
@@ -252,32 +314,43 @@ class _KycPageState extends State<KycPage> {
             ? IconButton(icon: const Icon(Icons.close), onPressed: _onCancel)
             : null,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Privacy notice
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryLight.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
-                ),
-                child: Text(
-                  'Privacy notice: Your identity details are kept confidential and are used only for verification, trust, and fraud prevention. We do not display your ID information publicly.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.textPrimary,
-                        height: 1.4,
-                      ),
-                ),
-              ),
-              const SizedBox(height: _sectionGap),
+      body: uid.isEmpty
+          ? const Center(child: Text('Please sign in'))
+          : StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+              builder: (context, snapshot) {
+                final data = snapshot.data?.data() as Map<String, dynamic>?;
+                final kycStatus = data?['kycStatus'] as String?;
+                final underReview = kycStatus == 'pending' || kycStatus == 'submitted';
+                if (underReview) {
+                  return _buildUnderReviewContent();
+                }
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Privacy notice
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryLight.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
+                          ),
+                          child: Text(
+                            'Privacy notice: Your identity details are kept confidential and are used only for verification, trust, and fraud prevention. We do not display your ID information publicly.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textPrimary,
+                                  height: 1.4,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(height: _sectionGap),
 
-              if (_step == 0) ...[
+                        if (_step == 0) ...[
                 Text(
                   'Step 1: Identity',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -362,109 +435,111 @@ class _KycPageState extends State<KycPage> {
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.error),
                   ),
                 ],
-                const SizedBox(height: _sectionGap),
-                FilledButton(
-                  onPressed: _nextStep,
-                  child: const Text('Next – ID photos'),
-                ),
-              ] else ...[
-                Text(
-                  'Step 2: ID photos',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Clear photo, all corners visible.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
-                ),
-                const SizedBox(height: _spacing),
-                _buildFilePicker('ID Front Photo *', 'idFront', _idFrontBytes, _idFrontFileName, true),
-                _buildFilePicker('ID Back Photo', 'idBack', _idBackBytes, _idBackFileName, false),
-                const SizedBox(height: _sectionGap),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: _spacing),
-                    child: Text(
-                      _error!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.error),
+                        const SizedBox(height: _sectionGap),
+                        FilledButton(
+                          onPressed: _nextStep,
+                          child: const Text('Next – ID photos'),
+                        ),
+                        ] else ...[
+                        Text(
+                          'Step 2: ID photos',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Clear photo, all corners visible.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                        ),
+                        const SizedBox(height: _spacing),
+                        _buildFilePicker('ID Front Photo *', 'idFront', _idFrontBytes, _idFrontFileName, true),
+                        _buildFilePicker('ID Back Photo', 'idBack', _idBackBytes, _idBackFileName, false),
+                        const SizedBox(height: _sectionGap),
+                        if (_error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: _spacing),
+                            child: Text(
+                              _error!,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.error),
+                            ),
+                          ),
+                        FilledButton(
+                          onPressed: _isSubmitting ? null : _submitKyc,
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text('Submit KYC Request'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: _isSubmitting ? null : () => setState(() => _step = 0),
+                          child: const Text('Back'),
+                        ),
+                        ],
+
+                        const SizedBox(height: _sectionGap),
+                        StreamBuilder<DocumentSnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(FirebaseAuth.instance.currentUser?.uid ?? '')
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) return const SizedBox.shrink();
+                            final userData = snapshot.data?.data() as Map<String, dynamic>?;
+                            final status = userData?['kycStatus'] as String?;
+                            final rejectionReason = userData?['kycRejectionReason'] as String?;
+                            if (status == 'rejected' && rejectionReason != null) {
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.error.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Previous request rejected',
+                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.error,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      rejectionReason,
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textPrimary),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'You can resubmit with corrected information.',
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                      ],
                     ),
                   ),
-                FilledButton(
-                  onPressed: _isSubmitting ? null : _submitKyc,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Submit KYC Request'),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: _isSubmitting ? null : () => setState(() => _step = 0),
-                  child: const Text('Back'),
-                ),
-              ],
-
-              const SizedBox(height: _sectionGap),
-              StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(FirebaseAuth.instance.currentUser?.uid ?? '')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const SizedBox.shrink();
-                  final userData = snapshot.data?.data() as Map<String, dynamic>?;
-                  final kycStatus = userData?['kycStatus'] as String?;
-                  final rejectionReason = userData?['kycRejectionReason'] as String?;
-                  if (kycStatus == 'rejected' && rejectionReason != null) {
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.error.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Previous request rejected',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.error,
-                                ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            rejectionReason,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textPrimary),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'You can resubmit with corrected information.',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+                );
+              },
+            ),
+          );
   }
 }
 

@@ -45,7 +45,7 @@ class _MorePageState extends State<MorePage> {
     final doc = await FirestoreService().getUser(user.uid);
     final data = doc.data() as Map<String, dynamic>?;
     final role = data?['role'] as String?;
-    if (mounted) setState(() => _isAdmin = role == 'admin');
+    if (mounted) setState(() => _isAdmin = role == 'admin' || role == 'super_admin');
   }
 
   Future<void> _loadVersion() async {

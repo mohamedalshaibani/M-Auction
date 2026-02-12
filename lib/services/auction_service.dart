@@ -377,10 +377,11 @@ class AuctionService {
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
         
-        // Adjust reservedDeposit by delta
+        // Adjust reservedDeposit by delta and set status to reserved_for_bid
         if (delta != 0) {
           transaction.update(walletRef, {
             'reservedDeposit': FieldValue.increment(delta),
+            'depositStatus': 'reserved_for_bid',
             'updatedAt': FieldValue.serverTimestamp(),
           });
         }
@@ -520,30 +521,32 @@ class AuctionService {
       // Check if deposit can be held (VIP waived or sufficient funds)
       if (vipWaived || availableDeposit >= requiredDeposit) {
         if (!vipWaived) {
-          // Move from availableDeposit to reservedDeposit
+          // Keep deposit reserved; mark as reserved_for_win (internal hold for delivery confirmation)
           tx.update(walletRef, {
             'availableDeposit': FieldValue.increment(-requiredDeposit),
             'reservedDeposit': FieldValue.increment(requiredDeposit),
+            'depositStatus': 'reserved_for_win',
             'updatedAt': FieldValue.serverTimestamp(),
           });
         }
         
-        // Update auction with deposit held
+        // Update auction with deposit held; deliveryStatus pending until both confirm
         tx.update(auctionRef, {
           'state': 'ENDED',
           'depositRequired': requiredDeposit,
           'depositHeld': vipWaived ? 0.0 : requiredDeposit,
           'depositStatus': vipWaived ? 'waived' : 'held',
+          'deliveryStatus': 'pending',
           'winnerDeadlineAt': Timestamp.fromDate(deadlineAt),
           'winnerDeadlineHours': deadlineHours,
         });
       } else {
-        // Insufficient deposit
         tx.update(auctionRef, {
           'state': 'ENDED',
           'depositRequired': requiredDeposit,
           'depositHeld': 0.0,
           'depositStatus': 'insufficient',
+          'deliveryStatus': 'pending',
           'winnerDeadlineAt': Timestamp.fromDate(deadlineAt),
           'winnerDeadlineHours': deadlineHours,
         });
@@ -722,7 +725,8 @@ class AuctionService {
 
     final walletDoc = await _firestoreService.getWallet(winnerId);
     final walletData = walletDoc.data() as Map<String, dynamic>?;
-    final lockedDeposit = (walletData?['lockedDeposit'] as num?)?.toDouble() ?? 0.0;
+    final reservedDeposit = (walletData?['reservedDeposit'] as num?)?.toDouble() ?? 0.0;
+    final lockedDeposit = reservedDeposit; // internal hold is in reservedDeposit
 
     if (lockedDeposit > 0) {
       final forfeitAmount = await _adminSettings.computeForfeitAmount(lockedDeposit);
@@ -753,45 +757,49 @@ class AuctionService {
     await _firestoreService.incrementStrikeCount(winnerId);
   }
 
-  // Confirm delivery (seller or buyer)
+  // Confirm delivery (seller or buyer). Buyer confirmation is primary gate for deposit release.
+  // Optional: 7-day fallback — if buyer doesn't confirm, route to admin review or auto-release (backend).
   Future<void> confirmDelivery({
     required String auctionId,
     required bool isSeller,
   }) async {
     final auctionRef = _firestore.collection('auctions').doc(auctionId);
-    
-    // Use transaction to atomically update and check for deliveryConfirmedAt
+    final now = FieldValue.serverTimestamp();
+
     await _firestore.runTransaction((tx) async {
       final auctionDoc = await tx.get(auctionRef);
       if (!auctionDoc.exists) {
         throw Exception('Auction not found');
       }
-      
+
       final data = auctionDoc.data() as Map<String, dynamic>;
-      
-      // Prepare update data
+
       final updateData = <String, dynamic>{};
-      
+
       if (isSeller) {
         updateData['sellerConfirmedDelivery'] = true;
+        updateData['sellerConfirmedAt'] = now;
       } else {
         updateData['buyerConfirmedDelivery'] = true;
+        updateData['buyerConfirmedAt'] = now;
       }
-      
-      // Check if both are confirmed and deliveryConfirmedAt is not set
-      final sellerConfirmed = isSeller 
-          ? true 
+
+      final sellerConfirmed = isSeller
+          ? true
           : (data['sellerConfirmedDelivery'] as bool? ?? false);
-      final buyerConfirmed = isSeller 
+      final buyerConfirmed = isSeller
           ? (data['buyerConfirmedDelivery'] as bool? ?? false)
           : true;
-      
+
       final deliveryConfirmedAt = data['deliveryConfirmedAt'];
-      
+
       if (sellerConfirmed && buyerConfirmed && deliveryConfirmedAt == null) {
-        updateData['deliveryConfirmedAt'] = FieldValue.serverTimestamp();
+        updateData['deliveryConfirmedAt'] = now;
+        updateData['deliveryStatus'] = 'confirmed';
+      } else {
+        updateData['deliveryStatus'] = 'pending';
       }
-      
+
       tx.update(auctionRef, updateData);
     });
   }
@@ -814,15 +822,15 @@ class AuctionService {
 
     final walletDoc = await _firestoreService.getWallet(winnerId);
     final walletData = walletDoc.data() as Map<String, dynamic>?;
-    final lockedDeposit = (walletData?['lockedDeposit'] as num?)?.toDouble() ?? 0.0;
+    final reservedDeposit = (walletData?['reservedDeposit'] as num?)?.toDouble() ?? 0.0;
 
-    if (lockedDeposit > 0) {
-      // Use PaymentService to refund via Stripe
+    if (reservedDeposit > 0) {
+      // Use PaymentService to refund via Stripe (backend updates wallet)
       await _paymentService.forfeitOrRefund(
         uid: winnerId,
         auctionId: auctionId,
         action: 'refund',
-        amount: lockedDeposit,
+        amount: reservedDeposit,
       );
     }
   }
@@ -931,7 +939,7 @@ class AuctionService {
     if (!userDoc.exists) return false;
     final userData = userDoc.data();
     final role = userData?['role'] as String?;
-    return role == 'admin';
+    return role == 'admin' || role == 'super_admin';
   }
 
   // Release contact info (called when both parties accept terms)

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/search_normalize.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -22,6 +23,7 @@ class FirestoreService {
     batch.set(userRef, {
       'displayName': displayName,
       'phoneNumber': phoneNumber,
+      'phoneDigits': digitsOnlyFromPhone(phoneNumber),
       'role': 'user',
       'kycStatus': 'not_submitted',
       'vipDepositWaived': false,
@@ -229,7 +231,7 @@ class FirestoreService {
     });
   }
 
-  // Release reservation
+  // Release reservation (e.g. user outbid or auction ended without winning)
   Future<void> releaseReservation(String uid, String auctionId) async {
     final reservationDoc = await getReservation(uid, auctionId);
     if (!reservationDoc.exists) return;
@@ -239,14 +241,23 @@ class FirestoreService {
         (reservationData['requiredDeposit'] as num?)?.toDouble() ?? 0.0;
 
     if (requiredDeposit > 0) {
-      // Subtract from reservedDeposit
       await _firestore.collection('wallets').doc(uid).update({
         'reservedDeposit': FieldValue.increment(-requiredDeposit),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      // If no reserved amount left, set status back to active
+      final walletSnap = await _firestore.collection('wallets').doc(uid).get();
+      final data = walletSnap.data();
+      final reserved =
+          (data?['reservedDeposit'] as num?)?.toDouble() ?? 0.0;
+      if (reserved == 0) {
+        await _firestore.collection('wallets').doc(uid).update({
+          'depositStatus': 'active',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
     }
 
-    // Delete reservation
     await _firestore
         .collection('reservations')
         .doc(uid)

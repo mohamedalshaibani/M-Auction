@@ -5,6 +5,7 @@ import '../models/watch_brand.dart';
 class AdminSettingsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   Map<String, dynamic>? _cachedSettings;
+  Map<String, dynamic>? _cachedFees;
 
   Future<Map<String, dynamic>> _fetchSettings() async {
     if (_cachedSettings != null) return _cachedSettings!;
@@ -18,9 +19,34 @@ class AdminSettingsService {
     return _cachedSettings!;
   }
 
+  /// Fees/deposit config: adminSettings/fees (feeRules, depositTiers, depositMaxAmount).
+  Future<Map<String, dynamic>> _fetchFees() async {
+    if (_cachedFees != null) return _cachedFees!;
+    final doc = await _firestore.collection('adminSettings').doc('fees').get();
+    _cachedFees = doc.exists ? (doc.data() ?? {}) : {};
+    return _cachedFees!;
+  }
+
   Future<void> refresh() async {
     _cachedSettings = null;
+    _cachedFees = null;
     await _fetchSettings();
+    await _fetchFees();
+  }
+
+  /// Save fees config (admin only). Persists to adminSettings/fees.
+  Future<void> setFeesConfig(Map<String, dynamic> config) async {
+    await _firestore.collection('adminSettings').doc('fees').set(
+      {...config, 'updatedAt': FieldValue.serverTimestamp()},
+      SetOptions(merge: true),
+    );
+    _cachedFees = null;
+  }
+
+  /// Load full fees config for Super Admin UI (feeRules, depositTiers, depositMaxAmount, depositHoldRules).
+  Future<Map<String, dynamic>> getFeesConfig() async {
+    final fees = await _fetchFees();
+    return Map<String, dynamic>.from(fees);
   }
 
   /// Stripe publishable key (client-safe). Stored in adminSettings/main.stripePublishableKey.
@@ -186,12 +212,34 @@ class AdminSettingsService {
         MapEntry(key, (value as num).toDouble()));
   }
 
-  // Deposit rules
+  // Deposit rules (main doc: min/max/rate tiers for backward compatibility)
   Future<List<Map<String, dynamic>>> getDepositRulesTiers() async {
     final settings = await _fetchSettings();
     final depositRules = settings['depositRules'] as Map<String, dynamic>?;
     final tiers = depositRules?['tiers'] as List<dynamic>?;
     return tiers?.cast<Map<String, dynamic>>() ?? [];
+  }
+
+  /// Deposit tiers from fees config: [{ amount, maxBidLimit }]. Empty if not set.
+  Future<List<Map<String, dynamic>>> getDepositTiersList() async {
+    final fees = await _fetchFees();
+    final list = fees['depositTiers'] as List<dynamic>?;
+    if (list == null || list.isEmpty) return [];
+    return list
+        .map((e) => (e as Map<String, dynamic>))
+        .where((t) =>
+            (t['amount'] is num) &&
+            (t['maxBidLimit'] is num))
+        .toList();
+  }
+
+  /// Max allowed deposit amount (cap). No cap if null or <= 0.
+  Future<double> getDepositMaxAmount() async {
+    final fees = await _fetchFees();
+    final v = fees['depositMaxAmount'];
+    if (v == null) return double.infinity;
+    final n = (v is num) ? v.toDouble() : double.tryParse(v.toString());
+    return (n != null && n > 0) ? n : double.infinity;
   }
 
   // Forfeit rules
@@ -208,12 +256,34 @@ class AdminSettingsService {
     return (settings['winnerDeadlineHours'] as num?)?.toInt() ?? 48;
   }
 
-  // Compute required deposit based on price and deposit rules
+  /// Days after delivery confirmation request before auto-release or admin review (e.g. 7).
+  /// Used by backend for fallback when buyer doesn't confirm; deposit release gate is buyer confirm.
+  Future<int> getDeliveryConfirmationTimeoutDays() async {
+    final fees = await _fetchFees();
+    final v = fees['deliveryConfirmationTimeoutDays'];
+    if (v == null) return 7;
+    return (v is num) ? (v as num).toInt() : (int.tryParse(v.toString()) ?? 7);
+  }
+
+  // Compute required deposit based on price (tier-based from fees, else rate-based from main)
   Future<double> computeRequiredDeposit(double price) async {
+    final tierList = await getDepositTiersList();
+    if (tierList.isNotEmpty) {
+      // Tier-based: smallest amount such that maxBidLimit >= price
+      double best = double.infinity;
+      for (final t in tierList) {
+        final maxBid = (t['maxBidLimit'] as num).toDouble();
+        if (maxBid >= price) {
+          final amt = (t['amount'] as num).toDouble();
+          if (amt < best) best = amt;
+        }
+      }
+      return best.isFinite ? best : 0.0;
+    }
+
     final tiers = await getDepositRulesTiers();
     if (tiers.isEmpty) return 0.0;
 
-    // Find matching tier
     for (final tier in tiers) {
       final minValue = (tier['min'] as num?)?.toDouble() ?? 0.0;
       final maxValue = tier['max'] as num?;
@@ -221,17 +291,11 @@ class AdminSettingsService {
 
       if (maxValue != null) {
         final max = maxValue.toDouble();
-        if (price >= minValue && price <= max) {
-          return price * rate;
-        }
+        if (price >= minValue && price <= max) return price * rate;
       } else {
-        // No max means it's the highest tier
-        if (price >= minValue) {
-          return price * rate;
-        }
+        if (price >= minValue) return price * rate;
       }
     }
-
     return 0.0;
   }
 
@@ -262,14 +326,26 @@ class AdminSettingsService {
     return 0.0;
   }
 
-  // Calculate maximum bid limit based on eligible deposit
+  // Calculate maximum bid limit based on eligible deposit (tier-based from fees, else rate-based from main)
   Future<double> calculateMaxBidLimit(double eligibleDeposit) async {
+    final tierList = await getDepositTiersList();
+    if (tierList.isNotEmpty) {
+      // Tier-based: highest maxBidLimit among tiers with amount <= eligibleDeposit
+      double best = 0.0;
+      for (final t in tierList) {
+        final amt = (t['amount'] as num).toDouble();
+        if (amt <= eligibleDeposit) {
+          final maxBid = (t['maxBidLimit'] as num).toDouble();
+          if (maxBid > best) best = maxBid;
+        }
+      }
+      return best;
+    }
+
     final tiers = await getDepositRulesTiers();
     if (tiers.isEmpty) return double.infinity;
 
     double maxBid = 0.0;
-
-    // Reverse sort tiers by min value to find highest bid we can afford
     final sortedTiers = List<Map<String, dynamic>>.from(tiers)
       ..sort((a, b) {
         final aMin = (a['min'] as num?)?.toDouble() ?? 0.0;
@@ -281,10 +357,7 @@ class AdminSettingsService {
       final minValue = (tier['min'] as num?)?.toDouble() ?? 0.0;
       final maxValue = tier['max'] as num?;
       final rate = (tier['rate'] as num?)?.toDouble() ?? 0.0;
-
       if (rate == 0) continue;
-
-      // Calculate max bid for this tier where requiredDeposit <= eligibleDeposit
       final maxRequiredDeposit = eligibleDeposit;
       final maxBidForTier = maxRequiredDeposit / rate;
 
@@ -297,15 +370,35 @@ class AdminSettingsService {
           maxBid = max;
         }
       } else {
-        // No max means it's the highest tier
         if (maxBidForTier >= minValue) {
           maxBid = maxBidForTier;
           break;
         }
       }
     }
-
     return maxBid;
+  }
+
+  /// For a given deposit amount, return the maxBidLimit from the matching tier (exact or nearest).
+  /// Returns null if amount is not in any tier or no tiers configured.
+  Future<double?> getMaxBidLimitForDepositAmount(double amount) async {
+    final tierList = await getDepositTiersList();
+    if (tierList.isEmpty) return null;
+    // Exact match first
+    for (final t in tierList) {
+      final a = (t['amount'] as num).toDouble();
+      if (a == amount) return (t['maxBidLimit'] as num).toDouble();
+    }
+    // Nearest tier (smallest tier >= amount, or largest tier < amount)
+    List<Map<String, dynamic>> sorted = List.from(tierList)
+      ..sort((a, b) => (a['amount'] as num).compareTo(b['amount'] as num));
+    double? nearestMaxBid;
+    for (final t in sorted) {
+      final a = (t['amount'] as num).toDouble();
+      if (a <= amount) nearestMaxBid = (t['maxBidLimit'] as num).toDouble();
+      else break;
+    }
+    return nearestMaxBid;
   }
 
   // Compute forfeit amount based on locked deposit and forfeit rules

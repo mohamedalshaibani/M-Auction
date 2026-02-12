@@ -16,6 +16,7 @@ import '../widgets/unified_app_bar.dart';
 import 'terms_contract_page.dart';
 import 'payment_page.dart';
 import 'edit_draft_auction_page.dart';
+import 'live_chat_page.dart';
 
 // Bidding card: uniform heights, padding, and corner radius for time pill, bid input, increment buttons
 const double _kBidCardRadius = 10.0;
@@ -79,46 +80,65 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
     final args = <String, dynamic>{'returnAuctionId': widget.auctionId};
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Complete setup to bid'),
-        content: const Text(
-          'To place bids, please complete account setup (phone + email + profile + terms + deposit/KYC).',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Not now'),
+      builder: (ctx) {
+        final isKycUnderReview = step == BidEligibilityStep.kycUnderReview;
+        return AlertDialog(
+          title: Text(isKycUnderReview ? 'Identity verification under review' : 'Complete setup to bid'),
+          content: Text(
+            isKycUnderReview ? result.message : 'To place bids, please complete account setup (phone + email + profile + terms + deposit/KYC).',
           ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              switch (step) {
-                case BidEligibilityStep.login:
-                  nav.pushNamed('/login', arguments: args);
-                  break;
-                case BidEligibilityStep.verifyEmail:
-                  nav.pushNamed('/emailVerification', arguments: {...args, 'returnAfterVerify': true});
-                  break;
-                case BidEligibilityStep.acceptTerms:
-                  nav.pushNamed('/acceptTerms', arguments: args);
-                  break;
-                case BidEligibilityStep.createProfile:
-                  nav.pushNamed('/createProfile', arguments: args);
-                  break;
-                case BidEligibilityStep.addDeposit:
-                  nav.pushNamed('/wallet', arguments: args);
-                  break;
-                case BidEligibilityStep.kyc:
-                  nav.pushNamed('/kyc', arguments: args);
-                  break;
-                case BidEligibilityStep.canBid:
-                  break;
-              }
-            },
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Not now'),
+            ),
+            if (isKycUnderReview)
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  nav.push(
+                    MaterialPageRoute<void>(builder: (_) => const LiveChatPage()),
+                  );
+                },
+                child: const Text('Live Chat'),
+              )
+            else
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  switch (step) {
+                    case BidEligibilityStep.login:
+                      nav.pushNamed('/login', arguments: args);
+                      break;
+                    case BidEligibilityStep.verifyEmail:
+                      nav.pushNamed('/emailVerification', arguments: {...args, 'returnAfterVerify': true});
+                      break;
+                    case BidEligibilityStep.acceptTerms:
+                      nav.pushNamed('/acceptTerms', arguments: args);
+                      break;
+                    case BidEligibilityStep.createProfile:
+                      nav.pushNamed('/createProfile', arguments: args);
+                      break;
+                    case BidEligibilityStep.addDeposit:
+                      nav.pushNamed('/wallet', arguments: args);
+                      break;
+                    case BidEligibilityStep.kyc:
+                      nav.pushNamed('/kyc', arguments: args);
+                      break;
+                    case BidEligibilityStep.kycUnderReview:
+                      nav.push(
+                        MaterialPageRoute<void>(builder: (_) => const LiveChatPage()),
+                      );
+                      break;
+                    case BidEligibilityStep.canBid:
+                      break;
+                  }
+                },
+                child: const Text('Continue'),
+              ),
+          ],
+        );
+      },
     );
     return false;
   }
@@ -203,23 +223,30 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
 
     if (kycStatus != 'approved') {
       setState(() {
-        _bidError =
-            'KYC verification required to place bids. Please complete verification first.';
+        final underReview = kycStatus == 'pending' || kycStatus == 'submitted';
+        _bidError = underReview
+            ? "Your identity verification is under review. You'll be able to bid once it's approved."
+            : 'KYC verification required to place bids. Please complete verification first.';
         _isPlacingBid = false;
       });
       if (mounted) {
+        final underReview = kycStatus == 'pending' || kycStatus == 'submitted';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'KYC verification required to place bids. Please complete verification first.',
+              underReview
+                  ? "Your identity verification is under review. You'll be able to bid once it's approved."
+                  : 'KYC verification required to place bids. Please complete verification first.',
             ),
           ),
         );
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            Navigator.of(context).pushNamed('/kyc');
-          }
-        });
+        if (!underReview) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              Navigator.of(context).pushNamed('/kyc');
+            }
+          });
+        }
       }
       return;
     }
@@ -1736,7 +1763,7 @@ class _AuctionDetailPageState extends State<AuctionDetailPage> {
                       final userData =
                           userSnapshot.data?.data() as Map<String, dynamic>?;
                       final role = userData?['role'] as String?;
-                      final isAdmin = role == 'admin';
+                      final isAdmin = role == 'admin' || role == 'super_admin';
                       final contactReleased =
                           data['winnerContactReleased'] as bool? ?? false;
 

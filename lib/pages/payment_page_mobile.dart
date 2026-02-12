@@ -329,8 +329,10 @@ class _PaymentPageMobileState extends State<PaymentPageImpl> {
         submitBtn.disabled = false;
         buttonText.textContent = 'Pay Now';
       } else {
-        buttonText.textContent = 'Payment successful!';
-        if (window.StripePayment) window.StripePayment.postMessage('success');
+        // Do NOT treat client-side confirmPayment as final. Wait for the backend
+        // webhook to mark payments/{paymentId}.status = succeeded (which then updates wallet).
+        buttonText.textContent = 'Processing...';
+        submitBtn.disabled = true;
       }
     });
   </script>

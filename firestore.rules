@@ -3,10 +3,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if user is admin
+    // Helper function to check if user is admin or super_admin
     function isAdmin() {
-      return request.auth != null && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      let userRole = request.auth != null ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : null;
+      return userRole == 'admin' || userRole == 'super_admin';
     }
     
     // Helper function to check if user is owner
@@ -39,24 +39,33 @@ service cloud.firestore {
       // User can update only FCM token fields on their own doc
       (isOwner(uid) &&
        request.resource.data.diff(resource.data).affectedKeys()
-         .hasOnly(['fcmToken', 'platform', 'tokenUpdatedAt']));
+         .hasOnly(['fcmToken', 'platform', 'tokenUpdatedAt'])) ||
+      // Admin can assign role (user / admin / super_admin) to any user
+      (isAdmin() &&
+       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']));
     }
     
-    // KYC Requests collection
+    // KYC Requests collection — one doc per user (doc id = uid). Only one active request at a time.
     match /kycRequests/{uid} {
       // Users can read their own KYC request
       allow read: if isOwner(uid) || isAdmin();
       
-      // Users can create/update their own KYC request when status is pending/not yet reviewed
-      allow create, update: if isOwner(uid) && (
-        // Cannot set status to approved/rejected
+      // User can create their KYC request (no existing doc or overwriting not-submitted)
+      allow create: if isOwner(uid) && (
         !('status' in request.resource.data) ||
         request.resource.data.status == 'pending'
       ) &&
-      // Cannot write reviewedBy/reviewedAt/rejectionReason (admin only)
-      (!('reviewedBy' in request.resource.data) && 
+      (!('reviewedBy' in request.resource.data) &&
        !('reviewedAt' in request.resource.data) &&
        !('rejectionReason' in request.resource.data));
+      
+      // User can update only when current status is NOT pending (e.g. rejected — resubmit). Prevents duplicate/overwrite while under review.
+      allow update: if isOwner(uid) &&
+                      resource.data.status != 'pending' &&
+                      (!('status' in request.resource.data) || request.resource.data.status == 'pending') &&
+                      (!('reviewedBy' in request.resource.data) &&
+                       !('reviewedAt' in request.resource.data) &&
+                       !('rejectionReason' in request.resource.data));
       
       // Admin can review (approve/reject) and write reviewedBy/reviewedAt/rejectionReason
       allow update: if isAdmin() && (
@@ -68,22 +77,21 @@ service cloud.firestore {
       );
     }
     
-    // Wallets collection
+    // Wallets: availableDeposit and deposit refs (depositPaymentIntentId, etc.) are backend-only.
     match /wallets/{uid} {
-      // Users can read their own wallet, admins can read all
       allow read: if isOwner(uid) || isAdmin();
       
-      // Owner can create their own wallet once (initial profile setup) with zero balances
+      // Owner can create their own wallet once with zero balances (lockedDeposit optional for backward compat)
       allow create: if isOwner(uid) &&
-                      request.resource.data.keys().hasAll(['availableDeposit', 'lockedDeposit', 'reservedDeposit', 'depositStatus', 'updatedAt']) &&
+                      request.resource.data.keys().hasAll(['availableDeposit', 'reservedDeposit', 'depositStatus', 'updatedAt']) &&
                       request.resource.data.availableDeposit == 0 &&
-                      request.resource.data.lockedDeposit == 0 &&
                       request.resource.data.reservedDeposit == 0 &&
                       request.resource.data.depositStatus == 'none';
       allow delete: if false;
+      // Client may update only reservedDeposit, depositStatus, updatedAt. availableDeposit and deposit refs (depositPaymentIntentId, depositAmount, depositCreatedAt, depositRefs) are backend-only.
       allow update: if isOwner(uid) &&
                       request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['reservedDeposit', 'updatedAt']);
+                        .hasOnly(['reservedDeposit', 'depositStatus', 'updatedAt']);
     }
     
     // Auctions collection — public read required for guest browsing (Home/Explore/Category lists)
@@ -123,12 +131,14 @@ service cloud.firestore {
         // Seller can update delivery confirmation
         (resource.data.sellerId == request.auth.uid && 
          resource.data.state == 'ENDED' &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sellerConfirmedDelivery'])) ||
-        // Winner can update purchase confirmation and delivery confirmation
+         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sellerConfirmedDelivery']) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sellerConfirmedDelivery', 'sellerConfirmedAt']))) ||
+        // Winner can update purchase confirmation and delivery confirmation (deliveryStatus, buyerConfirmedAt)
         (resource.data.currentWinnerId == request.auth.uid && 
          resource.data.state == 'ENDED' &&
          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buyerConfirmedPurchase', 'purchaseConfirmedAt']) ||
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buyerConfirmedDelivery']) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buyerConfirmedDelivery', 'buyerConfirmedAt', 'deliveryStatus', 'deliveryConfirmedAt']) ||
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['buyerConfirmedPurchase', 'purchaseConfirmedAt', 'buyerConfirmedDelivery']))) ||
         // Admin can force release contact
         (isAdmin() && 
@@ -247,12 +257,38 @@ service cloud.firestore {
       }
     }
 
-    // Support threads: support_threads/{threadId} and messages (senderUid, senderRole, text, createdAt)
-    // threadId is the user's uid (one thread per user with support)
+    // Support threads: support_threads/{threadId} - multi-ticket per user
+    // threadId = uid (legacy) or uid_T{timestamp} (new tickets after closure)
+    // User owns if threadId==uid or resource.data.userId==uid
+    function isSupportThreadOwner(threadId) {
+      return request.auth != null && (
+        request.auth.uid == threadId ||
+        (resource != null && resource.data.get('userId', '') == request.auth.uid)
+      );
+    }
+    // User can create a thread only when the document's userId equals their uid (e.g. .add() with userId).
+    function canCreateSupportThread(threadId) {
+      return request.auth != null
+        && 'userId' in request.resource.data
+        && request.resource.data.userId == request.auth.uid;
+    }
+    function ownsSupportThread(threadId) {
+      let thread = get(/databases/$(database)/documents/support_threads/$(threadId));
+      return request.auth != null && (
+        request.auth.uid == threadId ||
+        thread.data.get('userId', '') == request.auth.uid
+      );
+    }
     match /support_threads/{threadId} {
-      allow read, write: if isOwner(threadId) || isAdmin();
+      allow read: if isSupportThreadOwner(threadId) || isAdmin();
+      allow create: if canCreateSupportThread(threadId) || isAdmin();
+      allow update: if isSupportThreadOwner(threadId) || isAdmin();
+      allow delete: if isAdmin();
       match /messages/{messageId} {
-        allow read, write: if isOwner(threadId) || isAdmin();
+        allow read: if ownsSupportThread(threadId) || isAdmin();
+        allow create: if (ownsSupportThread(threadId) || isAdmin()) &&
+          (isAdmin() || get(/databases/$(database)/documents/support_threads/$(threadId)).data.get('status', 'open') != 'closed');
+        allow update, delete: if isAdmin();
       }
     }
     

@@ -105,4 +105,21 @@ class PaymentService {
         .doc(paymentId)
         .snapshots();
   }
+
+  /// Request withdrawal of available deposit (refund via Stripe).
+  /// Allowed only when reservedDeposit == 0 and depositStatus != in_dispute.
+  /// Backend must track PaymentIntent ID for deposits and perform refund.
+  Future<void> requestDepositWithdraw() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('User must be authenticated');
+
+    try {
+      final callable = _functions.httpsCallable('requestDepositWithdraw');
+      await callable.call(<String, dynamic>{});
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception(e.message ?? 'Withdraw failed');
+    } catch (e) {
+      throw Exception('Withdraw failed: $e');
+    }
+  }
 }

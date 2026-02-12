@@ -1,15 +1,21 @@
 const functions = require('firebase-functions/v1');
-const {defineString} = require('firebase-functions/params');
 const admin = require('firebase-admin');
 
-// Migrate from functions.config() to params module (v7+)
-// Don't call .value() at module load - call it at runtime inside functions
-const stripeSecretKeyParam = defineString('STRIPE_SECRET_KEY', {
-  default: process.env.STRIPE_SECRET_KEY || '',
-});
-const stripeWebhookSecretParam = defineString('STRIPE_WEBHOOK_SECRET', {
-  default: process.env.STRIPE_WEBHOOK_SECRET || '',
-});
+function getStripeSecretKey() {
+  return (
+    functions.config()?.stripe?.secret_key ||
+    process.env.STRIPE_SECRET_KEY ||
+    ''
+  );
+}
+
+function getStripeWebhookSecret() {
+  return (
+    functions.config()?.stripe?.webhook_secret ||
+    process.env.STRIPE_WEBHOOK_SECRET ||
+    ''
+  );
+}
 
 // Initialize Stripe - will get secret at runtime
 let stripe;
@@ -29,7 +35,7 @@ exports.createPaymentIntent = functions.https.onCall(async (data, context) => {
 
   // Initialize Stripe with secret at runtime
   if (!stripe) {
-    const secretKey = stripeSecretKeyParam.value();
+    const secretKey = getStripeSecretKey();
     stripe = require('stripe')(secretKey);
   }
 
@@ -397,7 +403,7 @@ exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
 
   // Initialize Stripe with secret at runtime
   if (!stripe) {
-    const secretKey = stripeSecretKeyParam.value();
+    const secretKey = getStripeSecretKey();
     stripe = require('stripe')(secretKey);
   }
 
@@ -444,11 +450,11 @@ exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
     let result;
 
     if (action === 'forfeit') {
-      // For MVP, record forfeit in Firestore (manual Stripe refund can be done separately)
-      // Update wallet - move from locked to forfeited
+      // Update wallet: deduct from reservedDeposit (internal hold model)
       const walletRef = db.collection('wallets').doc(uid);
       await walletRef.update({
-        lockedDeposit: admin.firestore.FieldValue.increment(-amount),
+        reservedDeposit: admin.firestore.FieldValue.increment(-amount),
+        depositStatus: 'forfeited',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -490,11 +496,12 @@ exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
 
       result = {status: 'refunded', refundId: refund.id};
 
-      // Update wallet - move from locked to available
+      // Update wallet: deduct from reservedDeposit, add to availableDeposit (internal hold model)
       const walletRef = db.collection('wallets').doc(uid);
       await walletRef.update({
-        lockedDeposit: admin.firestore.FieldValue.increment(-amount),
+        reservedDeposit: admin.firestore.FieldValue.increment(-amount),
         availableDeposit: admin.firestore.FieldValue.increment(amount),
+        depositStatus: 'active',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -531,16 +538,124 @@ exports.forfeitOrRefund = functions.https.onCall(async (data, context) => {
   }
 });
 
+// User requests withdrawal of available deposit (refund via Stripe). Backend-only wallet updates.
+exports.requestDepositWithdraw = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  if (!stripe) {
+    const secretKey = getStripeSecretKey();
+    stripe = require('stripe')(secretKey);
+  }
+
+  const uid = context.auth.uid;
+  const walletRef = db.collection('wallets').doc(uid);
+  const walletSnap = await walletRef.get();
+
+  if (!walletSnap.exists) {
+    throw new functions.https.HttpsError('failed-precondition', 'Wallet not found');
+  }
+
+  const wallet = walletSnap.data();
+  const availableDeposit = Number(wallet.availableDeposit) || 0;
+  const reservedDeposit = Number(wallet.reservedDeposit) || 0;
+  const depositStatus = wallet.depositStatus || 'none';
+
+  // Withdraw gating: allowed only when reservedDeposit === 0; block only on in_dispute (other statuses e.g. active, none, reserved_for_win with 0 reserved do not block).
+  if (availableDeposit <= 0) {
+    throw new functions.https.HttpsError('failed-precondition', 'No available deposit to withdraw');
+  }
+  if (reservedDeposit !== 0) {
+    throw new functions.https.HttpsError('failed-precondition', 'Cannot withdraw while deposit is reserved');
+  }
+  if (depositStatus === 'in_dispute') {
+    throw new functions.https.HttpsError('failed-precondition', 'Cannot withdraw while deposit is in dispute');
+  }
+
+  const depositRefs = Array.isArray(wallet.depositRefs) ? wallet.depositRefs : [];
+  if (depositRefs.length === 0) {
+    throw new functions.https.HttpsError('failed-precondition', 'No deposit payment reference found for refund');
+  }
+
+  // Withdraw is allowed only when reservedDeposit === 0; only depositStatus 'in_dispute' blocks (other statuses e.g. active, none, reserved_for_win with 0 reserved are allowed).
+  // Refund FIFO (oldest first); support partial refunds per entry. Resolve chargeId from PaymentIntent if stored as null.
+  let remainingToRefund = availableDeposit;
+  const refundedRefs = [];
+  const stillValidRefs = [];
+
+  for (const ref of depositRefs) {
+    if (remainingToRefund <= 0) {
+      stillValidRefs.push(ref);
+      continue;
+    }
+    const amount = Number(ref.amount) || 0;
+    let chargeId = ref.chargeId || null;
+    const paymentIntentId = ref.paymentIntentId || null;
+    if (amount <= 0) {
+      stillValidRefs.push(ref);
+      continue;
+    }
+    if (!chargeId && paymentIntentId) {
+      try {
+        const pi = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge'] });
+        const raw = pi.latest_charge;
+        chargeId = raw ? (typeof raw === 'string' ? raw : (raw.id || null)) : null;
+      } catch (e) {
+        console.error('requestDepositWithdraw: could not resolve charge for', paymentIntentId, e.message);
+      }
+    }
+    if (!chargeId) {
+      stillValidRefs.push(ref);
+      continue;
+    }
+    const refundThis = Math.min(amount, remainingToRefund);
+    const amountInMinor = Math.round(refundThis * 100);
+
+    try {
+      const refund = await stripe.refunds.create({
+        charge: chargeId,
+        amount: amountInMinor,
+      });
+      refundedRefs.push({ paymentIntentId: paymentIntentId, amount: refundThis, refundId: refund.id });
+      remainingToRefund -= refundThis;
+      if (refundThis < amount) {
+        stillValidRefs.push({
+          ...ref,
+          amount: amount - refundThis,
+        });
+      }
+    } catch (err) {
+      console.error('requestDepositWithdraw refund error:', err);
+      throw new functions.https.HttpsError('internal', `Refund failed: ${err.message}`);
+    }
+  }
+
+  if (remainingToRefund > 0) {
+    throw new functions.https.HttpsError('internal', 'Could not refund full amount (insufficient refs)');
+  }
+
+  const totalRefunded = refundedRefs.reduce((sum, r) => sum + r.amount, 0);
+  await walletRef.update({
+    availableDeposit: admin.firestore.FieldValue.increment(-totalRefunded),
+    depositRefs: stillValidRefs,
+    depositStatus: totalRefunded >= availableDeposit && stillValidRefs.length === 0 ? 'none' : 'active',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { status: 'refunded', amount: totalRefunded, refundIds: refundedRefs.map(r => r.refundId) };
+});
+
 // Stripe webhook handler
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
   // Initialize Stripe with secret at runtime
   if (!stripe) {
-    const secretKey = stripeSecretKeyParam.value();
+    const secretKey = getStripeSecretKey();
     stripe = require('stripe')(secretKey);
   }
 
   const sig = req.headers['stripe-signature'];
-  const webhookSecret = stripeWebhookSecretParam.value();
+  const webhookSecret = getStripeWebhookSecret();
 
   if (!webhookSecret) {
     console.error('Webhook secret not configured');
@@ -550,6 +665,13 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
   let event;
 
   try {
+    if (!sig) {
+      console.error('Webhook signature verification failed: missing stripe-signature header', {
+        contentType: req.headers['content-type'],
+      });
+      return res.status(400).send('Webhook Error: missing stripe-signature header');
+    }
+
     // Get raw body - Firebase Functions provides req.rawBody for webhooks
     // If not available, use req.body as Buffer or string
     let payload;
@@ -644,12 +766,47 @@ async function handlePaymentIntentSucceeded(paymentIntent) {
     });
 
     if (type === 'deposit') {
-      // Update wallet
+      // Update wallet and persist deposit refs for long-term refunds (backend-only fields).
+      // Idempotent: skip if this paymentIntentId is already in depositRefs (webhook retry).
       const walletRef = db.collection('wallets').doc(uid);
-      await walletRef.update({
-        availableDeposit: admin.firestore.FieldValue.increment(amount),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      let chargeId = paymentIntent.latest_charge || null;
+      if (!chargeId && paymentIntentId) {
+        try {
+          const pi = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge'] });
+          const raw = pi.latest_charge;
+          chargeId = raw ? (typeof raw === 'string' ? raw : (raw.id || null)) : null;
+        } catch (e) {
+          console.warn('Could not resolve latest_charge for deposit:', paymentIntentId, e.message);
+        }
+      }
+      const depositEntry = {
+        paymentIntentId: paymentIntentId,
+        chargeId: chargeId,
+        amount: amount,
+        createdAt: admin.firestore.Timestamp.fromMillis((paymentIntent.created || 0) * 1000),
+      };
+      const walletSnap = await walletRef.get();
+      const existingRefs = walletSnap.exists && Array.isArray(walletSnap.data().depositRefs) ? walletSnap.data().depositRefs : [];
+      const alreadyProcessed = existingRefs.some(r => r.paymentIntentId === paymentIntentId);
+      if (alreadyProcessed) {
+        return; // idempotent: already appended this payment
+      }
+      if (!walletSnap.exists) {
+        await walletRef.set({
+          availableDeposit: amount,
+          reservedDeposit: 0,
+          depositStatus: 'active',
+          depositRefs: [depositEntry],
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } else {
+        await walletRef.update({
+          availableDeposit: admin.firestore.FieldValue.increment(amount),
+          depositStatus: 'active',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          depositRefs: admin.firestore.FieldValue.arrayUnion(depositEntry),
+        });
+      }
     } else if (type === 'listing_fee' && auctionId) {
       // Update auction and activate
       const auctionRef = db.collection('auctions').doc(auctionId);
@@ -827,14 +984,7 @@ async function handleChargeRefunded(charge) {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  // Update wallet if it was a deposit
-  if (paymentData.type === 'deposit') {
-    const walletRef = db.collection('wallets').doc(uid);
-    await walletRef.update({
-      availableDeposit: admin.firestore.FieldValue.increment(refundAmount),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
+  // Wallet is updated by requestDepositWithdraw when user withdraws; do not double-credit here for deposit.
 }
 
 // Scheduled function to enforce winner deadline (runs every 5 minutes) - Gen1
@@ -962,6 +1112,68 @@ exports.enforceWinnerDeadline = functions
   return null;
 });
 
+// 7-day delivery confirmation fallback: admin review only (no auto-release). Runs daily.
+exports.deliveryConfirmationTimeout = functions
+  .region('us-central1')
+  .pubsub
+  .schedule('0 9 * * *')
+  .timeZone('UTC')
+  .onRun(async (context) => {
+    const now = admin.firestore.Timestamp.now();
+    const nowMs = now.toMillis();
+    const feesDoc = await db.collection('adminSettings').doc('fees').get();
+    const timeoutDays = (feesDoc.exists && feesDoc.data().deliveryConfirmationTimeoutDays) || 7;
+    const cutoffMs = nowMs - timeoutDays * 24 * 60 * 60 * 1000;
+    const cutoff = admin.firestore.Timestamp.fromMillis(cutoffMs);
+
+    const auctionsSnap = await db.collection('auctions')
+      .where('state', '==', 'ENDED')
+      .where('deliveryStatus', '==', 'pending')
+      .get();
+
+    let needsReviewCount = 0;
+    for (const doc of auctionsSnap.docs) {
+      const data = doc.data();
+      // Use guaranteed timestamp: purchaseConfirmedAt (for winners who confirmed purchase) else endedAt
+      const purchaseConfirmedAt = data.purchaseConfirmedAt;
+      const endedAt = data.endedAt;
+      const since = purchaseConfirmedAt || endedAt;
+      if (!since) continue;
+      const at = since.toMillis ? since.toMillis() : (since._seconds ? since._seconds * 1000 : 0);
+      if (at >= cutoffMs) continue;
+
+      await doc.ref.update({
+        deliveryStatus: 'needs_admin_review',
+        deliveryNeedsReviewAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      needsReviewCount++;
+
+      try {
+        await admin.messaging().send({
+          topic: ADMIN_TOPIC,
+          notification: {
+            title: 'Delivery confirmation needs review',
+            body: `Auction ${doc.id} has passed the ${timeoutDays}-day delivery confirmation period. Buyer or seller did not confirm. Please review.`,
+          },
+          data: {
+            auctionId: doc.id,
+            type: 'delivery_needs_review',
+          },
+          android: { priority: 'high' },
+          apns: { payload: { aps: { sound: 'default' } } },
+        });
+      } catch (err) {
+        console.error('deliveryConfirmationTimeout push error:', err);
+      }
+    }
+
+    if (needsReviewCount > 0) {
+      console.log(`deliveryConfirmationTimeout: set ${needsReviewCount} auction(s) to needs_admin_review`);
+    }
+    return null;
+  });
+
 // Scheduled function to close ended auctions (runs every 1 minute)
 exports.closeEndedAuctions = functions
   .region('us-central1')
@@ -1083,24 +1295,25 @@ exports.closeEndedAuctions = functions
             });
           }
           
-          // Update auction with deposit held
+          // Update auction with deposit held; deliveryStatus pending until both confirm
           tx.update(auctionDoc.ref, {
             state: 'ENDED',
             endedAt: admin.firestore.FieldValue.serverTimestamp(),
             depositRequired: requiredDeposit,
             depositHeld: vipWaived ? 0 : requiredDeposit,
             depositStatus: vipWaived ? 'waived' : 'held',
+            deliveryStatus: 'pending',
             winnerDeadlineAt: admin.firestore.Timestamp.fromDate(deadlineAt),
             winnerDeadlineHours: winnerDeadlineHours,
           });
         } else {
-          // Insufficient deposit
           tx.update(auctionDoc.ref, {
             state: 'ENDED',
             endedAt: admin.firestore.FieldValue.serverTimestamp(),
             depositRequired: requiredDeposit,
             depositHeld: 0,
             depositStatus: 'insufficient',
+            deliveryStatus: 'pending',
             winnerDeadlineAt: admin.firestore.Timestamp.fromDate(deadlineAt),
             winnerDeadlineHours: winnerDeadlineHours,
           });

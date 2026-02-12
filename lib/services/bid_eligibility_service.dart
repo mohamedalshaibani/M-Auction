@@ -19,6 +19,8 @@ enum BidEligibilityStep {
   addDeposit,
   /// User must submit KYC (ID/passport upload).
   kyc,
+  /// KYC already submitted and under review; block bid, show message + Live Chat CTA (no resubmit).
+  kycUnderReview,
 }
 
 /// Result of bid eligibility check.
@@ -108,18 +110,30 @@ class BidEligibilityService {
       );
     }
 
-    if (kycStatus != 'pending' && kycStatus != 'approved') {
+    // Only allow bidding when KYC is approved.
+    if (kycStatus == 'approved') {
       return const BidEligibilityResult(
-        canBid: false,
-        nextStep: BidEligibilityStep.kyc,
-        message: 'Complete KYC verification (ID/passport) to place a bid.',
+        canBid: true,
+        nextStep: BidEligibilityStep.canBid,
+        message: 'You can place a bid.',
       );
     }
 
+    // Under review: block bid, show message + Live Chat CTA; do not prompt to resubmit.
+    if (kycStatus == 'pending' || kycStatus == 'submitted') {
+      return const BidEligibilityResult(
+        canBid: false,
+        nextStep: BidEligibilityStep.kycUnderReview,
+        message:
+            "Your identity verification is under review. You'll be able to bid once it's approved. If it takes more than 24 hours, please contact support.",
+      );
+    }
+
+    // Not submitted or rejected: prompt to complete or resubmit KYC.
     return const BidEligibilityResult(
-      canBid: true,
-      nextStep: BidEligibilityStep.canBid,
-      message: 'You can place a bid.',
+      canBid: false,
+      nextStep: BidEligibilityStep.kyc,
+      message: 'Complete KYC verification (ID/passport) to place a bid.',
     );
   }
 }

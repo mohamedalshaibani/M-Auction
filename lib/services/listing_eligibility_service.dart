@@ -111,8 +111,10 @@ class ListingEligibilityService {
 
   /// Store email and optionally mark verified (e.g. after Firebase email verification).
   Future<void> setEmail(String uid, String email, {bool verified = false}) async {
+    final trimmed = email.trim();
     final updates = <String, dynamic>{
-      'email': email.trim(),
+      'email': trimmed,
+      'emailLower': trimmed.isEmpty ? null : trimmed.toLowerCase(),
       'emailVerified': verified,
     };
     if (verified) {

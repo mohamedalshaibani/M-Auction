@@ -4,10 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// Use [formatMoney] for AED amounts: thousand separators + 2 decimals (e.g. 12,500.00).
 
 /// Formats a number as money: thousand separators and 2 decimal places (e.g. 12,500.00).
+/// Handles infinity and NaN safely.
 String formatMoney(num value) {
   final n = value.toDouble();
+  if (!n.isFinite) return n.isNegative ? '-∞' : '∞';
   final s = n.toStringAsFixed(2);
   final parts = s.split('.');
+  if (parts.length < 2) return s;
   final intPart = parts[0];
   final isNegative = intPart.startsWith('-');
   final digits = isNegative ? intPart.substring(1) : intPart;

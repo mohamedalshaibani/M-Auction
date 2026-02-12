@@ -61,7 +61,7 @@ class PushNotificationService {
   Future<bool> _isAdmin(String uid) async {
     final doc = await _firestore.collection('users').doc(uid).get();
     final role = doc.data()?['role'] as String?;
-    return role == 'admin';
+    return role == 'admin' || role == 'super_admin';
   }
 
   Future<void> _saveTokenToFirestore(String uid, String token) async {
