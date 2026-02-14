@@ -636,10 +636,12 @@ exports.requestDepositWithdraw = functions.https.onCall(async (data, context) =>
   }
 
   const totalRefunded = refundedRefs.reduce((sum, r) => sum + r.amount, 0);
+  // Status depends on balance only: 'none' when balance is fully withdrawn, regardless of remaining partial refs
+  const newDepositStatus = totalRefunded >= availableDeposit ? 'none' : 'active';
   await walletRef.update({
     availableDeposit: admin.firestore.FieldValue.increment(-totalRefunded),
     depositRefs: stillValidRefs,
-    depositStatus: totalRefunded >= availableDeposit && stillValidRefs.length === 0 ? 'none' : 'active',
+    depositStatus: newDepositStatus,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
@@ -1634,4 +1636,25 @@ exports.onSupportMessageCreated = functions
     } catch (err) {
       console.error('onSupportMessageCreated send error:', err);
     }
+  });
+
+// Scheduled: deactivate expired ads every hour
+exports.deactivateExpiredAds = functions.pubsub
+  .schedule('every 1 hours')
+  .timeZone('UTC')
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+    const snapshot = await db.collection('ads')
+      .where('active', '==', true)
+      .where('expiresAt', '<=', now)
+      .get();
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      batch.update(doc.ref, { active: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    });
+    if (!snapshot.empty) {
+      await batch.commit();
+      console.log('Deactivated', snapshot.size, 'expired ads');
+    }
+    return null;
   });
