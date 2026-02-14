@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/category_model.dart';
-import '../models/watch_brand.dart';
 
 class AdminSettingsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -113,37 +112,6 @@ class AdminSettingsService {
         .where((s) => s.parentId == parentId)
         .toList()
       ..sort((a, b) => a.order.compareTo(b.order));
-  }
-
-  // Watch brands: source of truth is Firestore collection watchBrands (doc id = brand id, fields: name, order)
-  Future<List<WatchBrand>> getWatchBrands() async {
-    try {
-      final snapshot = await _firestore.collection('watchBrands').get();
-      if (snapshot.docs.isNotEmpty) {
-        final list = snapshot.docs.map((doc) {
-          final data = doc.data();
-          data['id'] = doc.id;
-          return WatchBrand.fromMap(data);
-        }).toList();
-        list.sort((a, b) => a.order.compareTo(b.order));
-        return list;
-      }
-    } catch (_) {}
-    return List.from(defaultWatchBrands)..sort((a, b) => a.order.compareTo(b.order));
-  }
-
-  // Whitelist (legacy — keep for backward compatibility)
-  Future<List<String>> getWhitelistBags() async {
-    final settings = await _fetchSettings();
-    final whitelist = settings['whitelist'] as Map<String, dynamic>?;
-    final bags = whitelist?['bags'] as List<dynamic>?;
-    return bags?.map((e) => e.toString()).toList() ?? [];
-  }
-
-  /// Legacy: returns watch brand names only (from getWatchBrands). Use getWatchBrands() for id+name.
-  Future<List<String>> getWhitelistWatches() async {
-    final brands = await getWatchBrands();
-    return brands.map((b) => b.name).toList();
   }
 
   // Min increment

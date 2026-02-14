@@ -15,11 +15,12 @@ import '../widgets/admin_layout.dart';
 import 'admin_support_thread_page.dart';
 import 'admin_fees_page.dart';
 import 'admin_admins_page.dart';
+import 'admin_brands_page.dart';
 
 class AdminPanelPage extends StatefulWidget {
   const AdminPanelPage({super.key, this.initialTabIndex = 0});
 
-  /// Tab index to show on open (0=Auctions, 1=Deposits, 2=KYC, 3=Finance, 4=Ads, 5=Support, 6=Admins).
+  /// Tab index to show on open (0=Auctions, 1=Deposits, 2=KYC, 3=Finance, 4=Ads, 5=Support, 6=Brands, 7=Admins).
   final int initialTabIndex;
 
   @override
@@ -38,7 +39,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialTabIndex.clamp(0, 6);
+    _currentIndex = widget.initialTabIndex.clamp(0, 7);
   }
 
   Future<bool> _checkAdmin() async {
@@ -70,7 +71,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Auction approved and activated')),
+          SnackBar(
+            content: const Text('Auction approved and activated'),
+            backgroundColor: AppTheme.primaryBlue,
+          ),
         );
         setState(() => _selectedDurations.remove(auctionId));
       }
@@ -100,6 +104,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 ? 'VIP deposit waiver enabled'
                 : 'VIP deposit waiver disabled',
           ),
+          backgroundColor: AppTheme.primaryBlue,
         ),
       );
     }
@@ -177,24 +182,52 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 final data = d.data() as Map<String, dynamic>?;
                 if (adminHasUnread(data)) adminUnread++;
               }
+              final useSidebar = MediaQuery.of(context).size.width >= kAdminWebBreakpoint;
               return Scaffold(
                 backgroundColor: AppTheme.backgroundLight,
                 appBar: UnifiedAppBar(
                   title: kAdminSectionTitles[_currentIndex],
                 ),
-                body: IndexedStack(
-                  index: _currentIndex,
-                  children: [
-                    _buildAuctionsTab(),
-                    _buildDepositsTab(),
-                    _buildKycTab(),
-                    _buildFinanceTab(),
-                    _buildAdsTab(),
-                    _buildSupportTab(),
-                    _buildAdminsTab(),
-                  ],
-                ),
-                bottomNavigationBar: AdminBottomNav(
+                body: useSidebar
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AdminSidebar(
+                            currentIndex: _currentIndex,
+                            onTap: (index) => setState(() => _currentIndex = index),
+                            supportUnreadCount: adminUnread,
+                          ),
+                          Expanded(
+                            child: IndexedStack(
+                              index: _currentIndex,
+                              children: [
+                                _buildAuctionsTab(),
+                                _buildDepositsTab(),
+                                _buildKycTab(),
+                                _buildFinanceTab(),
+                                _buildAdsTab(),
+                                _buildSupportTab(),
+                                _buildBrandsTab(),
+                                _buildAdminsTab(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    : IndexedStack(
+                        index: _currentIndex,
+                        children: [
+                          _buildAuctionsTab(),
+                          _buildDepositsTab(),
+                          _buildKycTab(),
+                          _buildFinanceTab(),
+                          _buildAdsTab(),
+                          _buildSupportTab(),
+                          _buildBrandsTab(),
+                          _buildAdminsTab(),
+                        ],
+                      ),
+                bottomNavigationBar: useSidebar ? null : AdminBottomNav(
                   currentIndex: _currentIndex,
                   onTap: (index) => setState(() => _currentIndex = index),
                   supportUnreadCount: adminUnread,
@@ -223,7 +256,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             icon: Icons.check_circle_outline,
             title: 'All caught up!',
             subtitle: 'No auctions pending approval',
-            iconColor: AppTheme.success,
+            iconColor: AppTheme.primaryBlue,
           );
         }
 
@@ -440,14 +473,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                 vertical: 6,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.success.withValues(alpha: 0.1),
+                                color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: AppTheme.success),
+                                border: Border.all(color: AppTheme.primaryBlue),
                               ),
                               child: Text(
                                 'VIP Deposit Waived',
                                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  color: AppTheme.success,
+                                  color: AppTheme.primaryBlue,
                                 ),
                               ),
                             ),
@@ -455,23 +488,35 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                             const SizedBox(height: 16),
                             Wrap(
                               spacing: 8,
+                              runSpacing: 8,
                               children: [
                                 ElevatedButton(
                                   onPressed: () => _toggleVipWaiver(uid, vipWaived),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: vipWaived ? AppTheme.warning : AppTheme.success,
-                                  ),
+                                  style: kAdminPrimaryButtonStyle,
                                   child: Text(vipWaived ? 'Remove VIP' : 'Grant VIP'),
                                 ),
                                 if (heldAmount > 0) ...[
                                   OutlinedButton(
                                     onPressed: () => _forceRefund(uid),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                      minimumSize: const Size(0, 44),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
                                     child: const Text('Force Refund'),
                                   ),
                                   OutlinedButton(
                                     onPressed: () => _forceForfeit(uid),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: AppTheme.error,
+                                      side: const BorderSide(color: AppTheme.error),
+                                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                      minimumSize: const Size(0, 44),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
                                     ),
                                     child: const Text('Force Forfeit'),
                                   ),
@@ -509,7 +554,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             icon: Icons.verified_user_outlined,
             title: 'All caught up!',
             subtitle: 'No pending KYC requests',
-            iconColor: AppTheme.success,
+            iconColor: AppTheme.primaryBlue,
           );
         }
 
@@ -741,18 +786,20 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                           ),
                         const SizedBox(height: 16),
                         Row(
-                          children: [
-                            Expanded(
-                              child: SizedBox(
-                                height: 48,
-                                child: ElevatedButton.icon(
-                                  onPressed: () async {
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    style: kAdminPrimaryButtonStyle,
+                                    onPressed: () async {
                                   if (user == null) return;
                                   try {
                                     await _kycService.approveKyc(uid, user.uid);
                                     if (!mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('KYC approved')),
+                                      SnackBar(
+                                        content: const Text('KYC approved'),
+                                        backgroundColor: AppTheme.primaryBlue,
+                                      ),
                                     );
                                   } catch (e) {
                                     if (!mounted) return;
@@ -761,20 +808,17 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                     );
                                   }
                                 },
-                                icon: const Icon(Icons.check_rounded, size: 20),
-                                label: const Text('Approve'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.success,
-                                  foregroundColor: Colors.white,
-                                ),
+                                icon: const Icon(Icons.check_rounded, size: 18),
+                                label: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: const Text('Approve'),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: SizedBox(
-                                height: 48,
-                                child: ElevatedButton.icon(
+                              child: ElevatedButton.icon(
+                                style: kAdminDangerButtonStyle,
                                 onPressed: () {
                                   showDialog(
                                     context: context,
@@ -813,7 +857,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                               if (!mounted) return;
                                               Navigator.of(context).pop();
                                               ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('KYC rejected')),
+                                                SnackBar(
+                                                  content: const Text('KYC rejected'),
+                                                  backgroundColor: AppTheme.primaryBlue,
+                                                ),
                                               );
                                             } catch (e) {
                                               if (!mounted) return;
@@ -831,12 +878,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                     ),
                                   );
                                 },
-                                icon: const Icon(Icons.close_rounded, size: 20),
-                                label: const Text('Reject'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.error,
-                                  foregroundColor: Colors.white,
-                                ),
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                label: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: const Text('Reject'),
                                 ),
                               ),
                             ),
@@ -930,6 +975,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             icon: Icons.attach_money_outlined,
             title: 'No revenue records yet',
             subtitle: 'Revenue will appear here once transactions occur.',
+            iconColor: AppTheme.primaryBlue,
           );
         }
         final records = snapshot.data!.docs;
@@ -980,7 +1026,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 'AED ${formatMoney(amount)}',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.success,
+                  color: AppTheme.primaryBlue,
                 ),
               ),
             ],
@@ -990,6 +1036,38 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           Text('User: ${uid.length > 20 ? '${uid.substring(0, 20)}...' : uid}', style: Theme.of(context).textTheme.bodySmall),
           Text('Date: $dateText', style: Theme.of(context).textTheme.bodySmall),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBrandsTab() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(kAdminContentPadding * 2),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const AdminEmptyState(
+              icon: Icons.branding_watermark_outlined,
+              title: 'Brands',
+              subtitle: 'Manage brand names by category for auction listings.',
+              iconSize: 56,
+              iconColor: AppTheme.primaryBlue,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => AdminLayout.wrap(const AdminBrandsPage()),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.add_business_rounded, size: 22),
+              label: const Text('Manage brands'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1105,6 +1183,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             icon: Icons.chat_bubble_outline,
             title: 'No support threads yet',
             subtitle: 'Customer support conversations will appear here.',
+            iconColor: AppTheme.primaryBlue,
           );
         }
         final sorted = List<QueryDocumentSnapshot>.from(docs)
@@ -1218,6 +1297,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       icon: Icons.campaign_outlined,
                       title: 'No ads yet',
                       subtitle: 'Add a partner banner below.',
+                      iconColor: AppTheme.primaryBlue,
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.symmetric(vertical: kAdminCardSpacing),
@@ -1246,7 +1326,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                               style: Theme.of(context).textTheme.titleSmall,
                             ),
                             subtitle: Text(
-                              'Partner ID: ${ad.partnerId} • Order: ${ad.order} • ${ad.active ? "Active" : "Inactive"}',
+                              'Partner ID: ${ad.partnerId} • Order: ${ad.order} • ${ad.active ? "Active" : "Inactive"}${ad.expiresAt != null ? " • Expires: ${ad.expiresAt!.toString().substring(0, 10)}" : ""}',
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: AppTheme.textSecondary,
                               ),
@@ -1330,6 +1410,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     final imageUrlController = TextEditingController();
     final linkUrlController = TextEditingController();
     final orderController = TextEditingController(text: '0');
+    final durationController = TextEditingController(text: '5');
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1375,6 +1456,15 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       labelText: 'Order (higher = first)',
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: durationController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Duration (days)',
+                      hintText: '0 = no expiry',
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1389,7 +1479,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   final partnerName = partnerNameController.text.trim();
                   final imageUrl = imageUrlController.text.trim();
                   final linkUrl = linkUrlController.text.trim().isEmpty ? null : linkUrlController.text.trim();
-                  final order = int.tryParse(orderController.text.trim()) ?? 0;
+                    final order = int.tryParse(orderController.text.trim()) ?? 0;
+                  final durationDays = int.tryParse(durationController.text.trim()) ?? 0;
                   if (partnerId.isEmpty || partnerName.isEmpty || imageUrl.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Partner ID, name and image URL are required')),
@@ -1403,6 +1494,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       imageUrl: imageUrl,
                       linkUrl: linkUrl,
                       order: order,
+                      durationDays: durationDays,
                     );
                     if (ctx.mounted) Navigator.of(ctx).pop();
                     if (context.mounted) {

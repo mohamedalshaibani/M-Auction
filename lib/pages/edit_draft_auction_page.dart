@@ -3,12 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/admin_settings_service.dart';
 import '../services/auction_service.dart';
+import '../services/brand_service.dart';
 import '../models/category_model.dart';
-import '../models/watch_brand.dart';
+import '../models/brand_model.dart';
 import '../theme/app_theme.dart';
 import '../widgets/auction_image_uploader.dart';
 import '../widgets/unified_app_bar.dart';
-import '../widgets/watch_brand_picker.dart';
+import '../widgets/brand_picker.dart';
 
 class EditDraftAuctionPage extends StatefulWidget {
   final String auctionId;
@@ -26,7 +27,6 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
   final _itemIdentifierController = TextEditingController();
   final _startPriceController = TextEditingController();
   final _reservePriceController = TextEditingController();
-  final _brandTextController = TextEditingController();
 
   static const List<String> _conditionOptions = ['New', 'Like New', 'Good', 'Fair', 'Used'];
   String? _selectedCondition;
@@ -35,11 +35,10 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
   List<Subcategory> _subcategories = defaultSubcategories.where((s) => s.parentId == 'bags').toList();
   String _selectedCategoryGroupId = 'bags';
   String? _selectedSubcategoryId;
-  String? _selectedBrandId; // bags: name string; watches: brand id
+  String? _selectedBrandId;
   int? _selectedDurationDays;
 
-  List<String> _bagBrands = [];
-  List<WatchBrand> _watchBrands = [];
+  List<Brand> _brands = [];
   List<int> _durationOptions = [];
   bool _isLoading = false;
   bool _isSubmitting = false;
@@ -48,6 +47,7 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
 
   final AdminSettingsService _adminSettings = AdminSettingsService();
   final AuctionService _auctionService = AuctionService();
+  final BrandService _brandService = BrandService();
 
   @override
   void initState() {
@@ -57,12 +57,8 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
 
   Future<void> _loadData() async {
     try {
-      // Load settings
-      final bagBrands = await _adminSettings.getWhitelistBags();
-      final watchBrands = await _adminSettings.getWatchBrands();
       final durations = await _adminSettings.getDurationOptions();
 
-      // Load auction data
       final auctionDoc = await FirebaseFirestore.instance
           .collection('auctions')
           .doc(widget.auctionId)
@@ -78,8 +74,7 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
 
       final data = auctionDoc.data()!;
       final state = data['state'] as String? ?? '';
-      
-      // Verify it's a draft
+
       if (state != 'DRAFT' && state != 'PENDING_APPROVAL') {
         setState(() {
           _error = 'Only draft auctions can be edited';
@@ -88,11 +83,10 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         return;
       }
 
-      // Verify ownership
       final user = FirebaseAuth.instance.currentUser;
       final sellerId = data['sellerId'] as String? ?? '';
       final ownerUid = data['ownerUid'] as String? ?? sellerId;
-      
+
       if (user?.uid != ownerUid) {
         setState(() {
           _error = 'You are not authorized to edit this auction';
@@ -105,10 +99,10 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       final subId = data['subcategory'] as String? ?? data['category'] as String? ?? 'bags';
       final groups = await _adminSettings.getTopLevelCategories();
       final subs = await _adminSettings.getSubcategories(groupId);
+      final brands = await _brandService.getBrands(category: groupId);
+
       if (!mounted) return;
       setState(() {
-        _bagBrands = bagBrands;
-        _watchBrands = watchBrands;
         _durationOptions = durations;
         _categoryGroups = groups;
         _selectedCategoryGroupId = groupId;
@@ -116,23 +110,18 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         _selectedSubcategoryId = subs.length == 1
             ? subs.first.id
             : (subs.any((s) => s.id == subId) ? subId : (subs.isNotEmpty ? subs.first.id : null));
-        if (groupId == 'bags') {
-          _selectedBrandId = data['brand'] as String?;
-        } else if (groupId == 'watches') {
-          final bid = data['brandId'] as String?;
-          if (bid != null && bid.isNotEmpty) {
-            _selectedBrandId = bid;
-          } else {
-            final bName = data['brand'] as String?;
-            for (final w in watchBrands) {
-              if (w.name == bName) { _selectedBrandId = w.id; break; }
-            }
-            _selectedBrandId ??= watchBrands.isNotEmpty ? watchBrands.first.id : null;
-          }
+        _brands = brands;
+        final bid = data['brandId'] as String?;
+        if (bid != null && bid.isNotEmpty) {
+          _selectedBrandId = brands.any((b) => b.id == bid) ? bid : (brands.isNotEmpty ? brands.first.id : null);
         } else {
-          _selectedBrandId = null;
+          final bName = data['brand'] as String?;
+          Brand? match;
+        for (final b in brands) {
+          if (b.name == bName) { match = b; break; }
         }
-        _brandTextController.text = (groupId != 'bags' && groupId != 'watches') ? (data['brand'] as String? ?? '') : '';
+          _selectedBrandId = match?.id ?? (brands.isNotEmpty ? brands.first.id : null);
+        }
         _selectedDurationDays = data['durationDays'] as int?;
         _titleController.text = data['title'] as String? ?? '';
         _descriptionController.text = data['description'] as String? ?? '';
@@ -159,26 +148,19 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
     _itemIdentifierController.dispose();
     _startPriceController.dispose();
     _reservePriceController.dispose();
-    _brandTextController.dispose();
     super.dispose();
   }
 
   Future<void> _onCategoryGroupChanged(String groupId) async {
     final subs = await _adminSettings.getSubcategories(groupId);
+    final brands = await _brandService.getBrands(category: groupId);
     if (!mounted) return;
     setState(() {
       _selectedCategoryGroupId = groupId;
       _subcategories = subs;
-      _selectedSubcategoryId = subs.length == 1 ? subs.first.id : (subs.isNotEmpty ? subs.first.id : null);
-      if (groupId == 'bags') {
-        _selectedBrandId = _bagBrands.isNotEmpty ? _bagBrands.first : null;
-        _brandTextController.clear();
-      } else if (groupId == 'watches') {
-        _selectedBrandId = _watchBrands.isNotEmpty ? _watchBrands.first.id : null;
-        _brandTextController.clear();
-      } else {
-        _selectedBrandId = null;
-      }
+      _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
+      _brands = brands;
+      _selectedBrandId = brands.isNotEmpty ? brands.first.id : null;
     });
   }
 
@@ -198,29 +180,12 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       setState(() => _error = 'Please select category and duration');
       return;
     }
-    String brand;
-    String? brandId;
-    if (_selectedCategoryGroupId == 'bags') {
-      brand = _selectedBrandId ?? '';
-    } else if (_selectedCategoryGroupId == 'watches') {
-      final id = _selectedBrandId;
-      if (id == null || id.isEmpty) {
-        setState(() => _error = 'Please select a brand');
-        return;
-      }
-      brandId = id;
-      WatchBrand? w;
-      for (final b in _watchBrands) {
-        if (b.id == id) { w = b; break; }
-      }
-      brand = w?.name ?? id;
-    } else {
-      brand = _brandTextController.text.trim();
-    }
-    if (brand.isEmpty) {
-      setState(() => _error = 'Please select or enter brand');
+    if (_selectedBrandId == null || _selectedBrandId!.isEmpty) {
+      setState(() => _error = 'Please select a brand');
       return;
     }
+    final idx = _brands.indexWhere((b) => b.id == _selectedBrandId);
+    final brandName = idx >= 0 ? _brands[idx].name : _selectedBrandId!;
 
     setState(() {
       _isLoading = true;
@@ -246,19 +211,17 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         'categoryGroup': _selectedCategoryGroupId,
         'subcategory': effectiveSubId,
         'category': effectiveSubId,
-        'brand': brand,
+        'brandId': _selectedBrandId,
+        'brand': brandName,
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'condition': _selectedCondition ?? _conditionOptions.first,
         'itemIdentifier': _itemIdentifierController.text.trim(),
         'startPrice': startPrice,
-        'currentPrice': startPrice, // Update current price too
+        'currentPrice': startPrice,
         'durationDays': _selectedDurationDays!,
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      if (brandId != null && brandId.isNotEmpty) {
-        updateData['brandId'] = brandId;
-      }
       if (reservePrice != null) {
         updateData['reservePrice'] = reservePrice;
       } else {
@@ -280,27 +243,18 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      
-      setState(() {
-        _error = 'Error updating auction: $e';
-      });
+      setState(() => _error = 'Error updating auction: $e');
     } finally {
-      // Always reset loading state
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _submitForApproval() async {
-    // First save current changes
     if (!_formKey.currentState!.validate()) return;
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      if (mounted) {
-        setState(() => _error = 'User not logged in');
-      }
+      if (mounted) setState(() => _error = 'User not logged in');
       return;
     }
 
@@ -308,36 +262,15 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         ? _subcategories.first.id
         : _selectedSubcategoryId;
     if (effectiveSubIdForSubmit == null || _selectedDurationDays == null) {
-      if (mounted) {
-        setState(() => _error = 'Please select category and duration');
-      }
+      if (mounted) setState(() => _error = 'Please select category and duration');
       return;
     }
-    String brandForSubmit;
-    String? brandIdForSubmit;
-    if (_selectedCategoryGroupId == 'bags') {
-      brandForSubmit = _selectedBrandId ?? '';
-    } else if (_selectedCategoryGroupId == 'watches') {
-      final id = _selectedBrandId;
-      if (id == null || id.isEmpty) {
-        if (mounted) setState(() => _error = 'Please select a brand');
-        return;
-      }
-      brandIdForSubmit = id;
-      WatchBrand? w;
-      for (final b in _watchBrands) {
-        if (b.id == id) { w = b; break; }
-      }
-      brandForSubmit = w?.name ?? id;
-    } else {
-      brandForSubmit = _brandTextController.text.trim();
-    }
-    if (brandForSubmit.isEmpty) {
-      if (mounted) {
-        setState(() => _error = 'Please select or enter brand');
-      }
+    if (_selectedBrandId == null || _selectedBrandId!.isEmpty) {
+      if (mounted) setState(() => _error = 'Please select a brand');
       return;
     }
+    final idx = _brands.indexWhere((b) => b.id == _selectedBrandId);
+    final brandName = idx >= 0 ? _brands[idx].name : _selectedBrandId!;
 
     if (mounted) {
       setState(() {
@@ -355,7 +288,8 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         'categoryGroup': _selectedCategoryGroupId,
         'subcategory': effectiveSubIdForSubmit,
         'category': effectiveSubIdForSubmit,
-        'brand': brandForSubmit,
+        'brandId': _selectedBrandId,
+        'brand': brandName,
         'title': _titleController.text.trim(),
         'description': _descriptionController.text.trim(),
         'condition': _selectedCondition ?? _conditionOptions.first,
@@ -365,9 +299,6 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
         'durationDays': _selectedDurationDays!,
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      if (brandIdForSubmit != null && brandIdForSubmit.isNotEmpty) {
-        updateData['brandId'] = brandIdForSubmit;
-      }
       if (reservePriceForSubmit != null) {
         updateData['reservePrice'] = reservePriceForSubmit;
       } else {
@@ -378,7 +309,6 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
           .doc(widget.auctionId)
           .update(updateData);
 
-      // Then submit for approval (which validates)
       await _auctionService.submitForApproval(widget.auctionId);
 
       if (!mounted) return;
@@ -392,15 +322,11 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
-      // Always reset submitting state, regardless of success or error
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -413,15 +339,12 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
       );
     }
 
-    if (_error != null && _bagBrands.isEmpty && _watchBrands.isEmpty) {
+    if (_error != null && _brands.isEmpty && _isLoadingData == false) {
       return Scaffold(
         appBar: const UnifiedAppBar(title: 'Edit Auction'),
         body: Center(child: Text(_error!)),
       );
     }
-
-    final useBrandDropdown = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches';
-    final isWatches = _selectedCategoryGroupId == 'watches';
 
     return Scaffold(
       appBar: const UnifiedAppBar(title: 'Edit Auction'),
@@ -452,27 +375,23 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
               ),
             ],
             const SizedBox(height: 16),
-            if (useBrandDropdown)
-              isWatches
-                  ? WatchBrandPicker(
-                      brands: _watchBrands,
-                      selectedBrandId: _selectedBrandId,
-                      onChanged: (value) => setState(() => _selectedBrandId = value),
-                      allowAll: false,
-                      label: 'Brand',
-                    )
-                  : DropdownButtonFormField<String>(
-                      value: _selectedBrandId,
-                      decoration: const InputDecoration(labelText: 'Brand'),
-                      items: _bagBrands
-                          .map((b) => DropdownMenuItem(value: b, child: Text(b)))
-                          .toList(),
-                      onChanged: (value) => setState(() => _selectedBrandId = value),
-                    )
+            if (_brands.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No brands configured for this category. Ask an admin to add brands.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                ),
+              )
             else
-              TextFormField(
-                controller: _brandTextController,
-                decoration: const InputDecoration(labelText: 'Brand (optional)'),
+              BrandPicker(
+                brands: _brands,
+                selectedBrandId: _selectedBrandId,
+                onChanged: (value) => setState(() => _selectedBrandId = value),
+                allowAll: false,
+                label: 'Brand',
               ),
             const SizedBox(height: 16),
             TextFormField(
@@ -566,7 +485,6 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
               },
             ),
             const SizedBox(height: 24),
-            // Image uploader
             AuctionImageUploader(
               auctionId: widget.auctionId,
               isDraft: true,
@@ -591,7 +509,7 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isLoading || _isSubmitting ? null : _save,
+                    onPressed: _isLoading || _isSubmitting || _brands.isEmpty ? null : _save,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.textSecondary,
                     ),
@@ -607,7 +525,7 @@ class _EditDraftAuctionPageState extends State<EditDraftAuctionPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _isLoading || _isSubmitting ? null : _submitForApproval,
+                    onPressed: _isLoading || _isSubmitting || _brands.isEmpty ? null : _submitForApproval,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryBlue,
                     ),

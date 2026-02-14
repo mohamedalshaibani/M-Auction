@@ -13,6 +13,7 @@ class PartnerAd {
   final int order;
   final bool active;
   final DateTime? createdAt;
+  final DateTime? expiresAt;
 
   const PartnerAd({
     required this.id,
@@ -23,11 +24,16 @@ class PartnerAd {
     this.order = 0,
     this.active = true,
     this.createdAt,
+    this.expiresAt,
   });
+
+  bool get isExpired =>
+      expiresAt != null && DateTime.now().isAfter(expiresAt!);
 
   static PartnerAd fromDoc(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>? ?? {};
     final ts = d['createdAt'] as Timestamp?;
+    final expTs = d['expiresAt'] as Timestamp?;
     return PartnerAd(
       id: doc.id,
       partnerId: d['partnerId'] as String? ?? doc.id,
@@ -37,6 +43,7 @@ class PartnerAd {
       order: (d['order'] as num?)?.toInt() ?? 0,
       active: d['active'] as bool? ?? true,
       createdAt: ts?.toDate(),
+      expiresAt: expTs?.toDate(),
     );
   }
 
@@ -60,7 +67,10 @@ Stream<List<PartnerAd>> streamPartnerAdsOnePerPartner() {
       .where('active', isEqualTo: true)
       .snapshots()
       .map((snapshot) {
-    final list = snapshot.docs.map((d) => PartnerAd.fromDoc(d)).where((a) => a.imageUrl.isNotEmpty).toList();
+    final list = snapshot.docs
+        .map((d) => PartnerAd.fromDoc(d))
+        .where((a) => a.imageUrl.isNotEmpty && !a.isExpired)
+        .toList();
     list.sort((a, b) => b.order.compareTo(a.order));
     final seen = <String>{};
     final onePerPartner = <PartnerAd>[];
@@ -78,15 +88,17 @@ Stream<QuerySnapshot> streamAllAds() {
   return FirebaseFirestore.instance.collection('ads').snapshots();
 }
 
-/// Admin: create ad.
+/// Admin: create ad. [durationDays] = days from now until ad expires (0 = no expiry).
 Future<void> createAd({
   required String partnerId,
   required String partnerName,
   required String imageUrl,
   String? linkUrl,
   int order = 0,
+  int durationDays = 0,
 }) async {
-  await FirebaseFirestore.instance.collection('ads').add({
+  final now = DateTime.now();
+  final data = <String, dynamic>{
     'partnerId': partnerId,
     'partnerName': partnerName,
     'imageUrl': imageUrl,
@@ -94,7 +106,13 @@ Future<void> createAd({
     'order': order,
     'active': true,
     'createdAt': FieldValue.serverTimestamp(),
-  });
+  };
+  if (durationDays > 0) {
+    data['expiresAt'] = Timestamp.fromDate(
+      now.add(Duration(days: durationDays)),
+    );
+  }
+  await FirebaseFirestore.instance.collection('ads').add(data);
 }
 
 /// Admin: update ad.
@@ -106,6 +124,7 @@ Future<void> updateAd(
   String? linkUrl,
   int? order,
   bool? active,
+  DateTime? expiresAt,
 }) async {
   final ref = FirebaseFirestore.instance.collection('ads').doc(adId);
   final updates = <String, dynamic>{};
@@ -115,6 +134,9 @@ Future<void> updateAd(
   if (linkUrl != null) updates['linkUrl'] = linkUrl;
   if (order != null) updates['order'] = order;
   if (active != null) updates['active'] = active;
+  if (expiresAt != null) {
+    updates['expiresAt'] = Timestamp.fromDate(expiresAt);
+  }
   updates['updatedAt'] = FieldValue.serverTimestamp();
   await ref.update(updates);
 }

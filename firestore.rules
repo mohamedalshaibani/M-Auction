@@ -312,6 +312,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
+    // Brands - public read, admin write
+    match /brands/{brandId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
     // Ads (partner banners) - public read, write by admin
     match /ads/{adId} {
       allow read: if true;

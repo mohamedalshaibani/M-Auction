@@ -3,11 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
+import '../services/brand_service.dart';
 import '../services/listing_eligibility_service.dart';
 import '../models/category_model.dart';
-import '../models/watch_brand.dart';
+import '../models/brand_model.dart';
 import '../widgets/auction_image_uploader.dart';
-import '../widgets/watch_brand_picker.dart';
+import '../widgets/brand_picker.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unified_app_bar.dart';
 import 'listing_flow_gate_page.dart';
@@ -26,7 +27,6 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   final _itemIdentifierController = TextEditingController();
   final _startPriceController = TextEditingController();
   final _reservePriceController = TextEditingController();
-  final _brandTextController = TextEditingController();
 
   static const List<String> _conditionOptions = ['New', 'Like New', 'Good', 'Fair', 'Used'];
   String? _selectedCondition;
@@ -35,18 +35,18 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
   List<Subcategory> _subcategories = defaultSubcategories.where((s) => s.parentId == 'bags').toList();
   String _selectedCategoryGroupId = 'bags';
   String? _selectedSubcategoryId;
-  String? _selectedBrandId; // for watches: brand id from WatchBrand; for bags: name from whitelist
+  String? _selectedBrandId;
   int? _selectedDurationDays;
-  String? _auctionId; // Store auctionId for image upload
+  String? _auctionId;
 
-  List<String> _bagBrands = [];
-  List<WatchBrand> _watchBrands = [];
+  List<Brand> _brands = [];
   List<int> _durationOptions = [];
   bool _isLoading = false;
   String? _error;
 
   final AuctionService _auctionService = AuctionService();
   final AdminSettingsService _adminSettings = AdminSettingsService();
+  final BrandService _brandService = BrandService();
   final ListingEligibilityService _eligibility = ListingEligibilityService();
 
   @override
@@ -56,7 +56,6 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
     _checkGate();
   }
 
-  /// Redirect to gate if user bypassed flow (e.g. deep link).
   Future<void> _checkGate() async {
     final result = await _eligibility.checkEligibility();
     if (!mounted) return;
@@ -69,21 +68,19 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
 
   Future<void> _loadSettings() async {
     try {
-      final bagBrands = await _adminSettings.getWhitelistBags();
-      final watchBrands = await _adminSettings.getWatchBrands();
       final durations = await _adminSettings.getDurationOptions();
       final groups = await _adminSettings.getTopLevelCategories();
       final subs = await _adminSettings.getSubcategories('bags');
+      final brands = await _brandService.getBrands(category: 'bags');
       if (mounted) {
         setState(() {
-          _bagBrands = bagBrands;
-          _watchBrands = watchBrands;
           _durationOptions = durations;
           _categoryGroups = groups;
           _subcategories = subs;
           _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
-          _selectedBrandId = _bagBrands.isNotEmpty ? _bagBrands.first : null;
-          _selectedDurationDays = _durationOptions.isNotEmpty ? _durationOptions.first : null;
+          _brands = brands;
+          _selectedBrandId = brands.isNotEmpty ? brands.first.id : null;
+          _selectedDurationDays = durations.isNotEmpty ? durations.first : null;
           _selectedCondition = _conditionOptions.first;
         });
       }
@@ -94,20 +91,14 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
 
   Future<void> _onCategoryGroupChanged(String groupId) async {
     final subs = await _adminSettings.getSubcategories(groupId);
+    final brands = await _brandService.getBrands(category: groupId);
     if (!mounted) return;
     setState(() {
       _selectedCategoryGroupId = groupId;
       _subcategories = subs;
       _selectedSubcategoryId = subs.isNotEmpty ? subs.first.id : null;
-      if (groupId == 'bags') {
-        _selectedBrandId = _bagBrands.isNotEmpty ? _bagBrands.first : null;
-        _brandTextController.clear();
-      } else if (groupId == 'watches') {
-        _selectedBrandId = _watchBrands.isNotEmpty ? _watchBrands.first.id : null;
-        _brandTextController.clear();
-      } else {
-        _selectedBrandId = null;
-      }
+      _brands = brands;
+      _selectedBrandId = brands.isNotEmpty ? brands.first.id : null;
     });
   }
 
@@ -118,7 +109,6 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
     _itemIdentifierController.dispose();
     _startPriceController.dispose();
     _reservePriceController.dispose();
-    _brandTextController.dispose();
     super.dispose();
   }
 
@@ -127,15 +117,10 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       setState(() => _error = 'Please create draft first');
       return;
     }
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
+    setState(() => _isLoading = true);
+    setState(() => _error = null);
     try {
       await _auctionService.submitForApproval(_auctionId!);
-
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -159,8 +144,6 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       return;
     }
 
-    // KYC is required after listing fee payment, before activation (enforced in admin flow).
-
     final effectiveSubId = _subcategories.length == 1
         ? _subcategories.first.id
         : _selectedSubcategoryId;
@@ -168,30 +151,12 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
       setState(() => _error = 'Please select category and duration');
       return;
     }
-    String brand;
-    String? brandId;
-    if (_selectedCategoryGroupId == 'bags') {
-      brand = _selectedBrandId ?? '';
-      brandId = null;
-    } else if (_selectedCategoryGroupId == 'watches') {
-      final id = _selectedBrandId;
-      if (id == null || id.isEmpty) {
-        setState(() => _error = 'Please select a brand');
-        return;
-      }
-      brandId = id;
-      WatchBrand? w;
-      for (final b in _watchBrands) {
-        if (b.id == id) { w = b; break; }
-      }
-      brand = w?.name ?? id;
-    } else {
-      brand = _brandTextController.text.trim();
-    }
-    if (brand.isEmpty) {
-      setState(() => _error = 'Please select or enter brand');
+    if (_selectedBrandId == null || _selectedBrandId!.isEmpty) {
+      setState(() => _error = 'Please select a brand');
       return;
     }
+    final idx = _brands.indexWhere((b) => b.id == _selectedBrandId);
+    final brandName = idx >= 0 ? _brands[idx].name : _selectedBrandId!;
 
     setState(() {
       _isLoading = true;
@@ -213,13 +178,12 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
         return;
       }
 
-      // Create draft auction first (needed for image upload)
       final auctionId = await _auctionService.createDraftAuction(
         sellerId: user.uid,
         categoryGroup: _selectedCategoryGroupId,
         subcategory: effectiveSubId,
-        brand: brand,
-        brandId: brandId,
+        brandId: _selectedBrandId!,
+        brand: brandName,
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         condition: _selectedCondition ?? _conditionOptions.first,
@@ -229,10 +193,8 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
         durationDays: _selectedDurationDays!,
       );
 
-      // Wait for Firestore to propagate before allowing uploads
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Verify auction exists before showing upload UI
       final verifyDoc = await FirebaseFirestore.instance
           .collection('auctions')
           .doc(auctionId)
@@ -266,9 +228,6 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
 
   @override
   Widget build(BuildContext context) {
-    final useBrandDropdown = _selectedCategoryGroupId == 'bags' || _selectedCategoryGroupId == 'watches';
-    final isWatches = _selectedCategoryGroupId == 'watches';
-
     return Scaffold(
       appBar: const UnifiedAppBar(title: 'Create Auction'),
       body: Form(
@@ -306,27 +265,23 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
               ),
             ],
             const SizedBox(height: 16),
-            if (useBrandDropdown)
-              isWatches
-                  ? WatchBrandPicker(
-                      brands: _watchBrands,
-                      selectedBrandId: _selectedBrandId,
-                      onChanged: (value) => setState(() => _selectedBrandId = value),
-                      allowAll: false,
-                      label: 'Brand',
-                    )
-                  : DropdownButtonFormField<String>(
-                      value: _selectedBrandId,
-                      decoration: const InputDecoration(labelText: 'Brand'),
-                      items: _bagBrands
-                          .map((b) => DropdownMenuItem(value: b, child: Text(b)))
-                          .toList(),
-                      onChanged: (value) => setState(() => _selectedBrandId = value),
-                    )
+            if (_brands.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No brands configured for this category. Ask an admin to add brands.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                ),
+              )
             else
-              TextFormField(
-                controller: _brandTextController,
-                decoration: const InputDecoration(labelText: 'Brand (optional)'),
+              BrandPicker(
+                brands: _brands,
+                selectedBrandId: _selectedBrandId,
+                onChanged: (value) => setState(() => _selectedBrandId = value),
+                allowAll: false,
+                label: 'Brand',
               ),
             const SizedBox(height: 16),
             TextFormField(
@@ -420,7 +375,6 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
               },
             ),
             const SizedBox(height: 24),
-            // Image uploader (create draft first if needed)
             if (_auctionId != null)
               AuctionImageUploader(
                 auctionId: _auctionId!,
@@ -460,7 +414,7 @@ class _SellCreateAuctionPageState extends State<SellCreateAuctionPage> {
             const SizedBox(height: 24),
             if (_auctionId == null)
               ElevatedButton(
-                onPressed: _isLoading ? null : _submit,
+                onPressed: _isLoading || _brands.isEmpty ? null : _submit,
                 child: _isLoading
                     ? const SizedBox(
                         height: 20,

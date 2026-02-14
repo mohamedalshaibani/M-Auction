@@ -48,14 +48,20 @@ class _AdminFeesPageState extends State<AdminFeesPage> {
 
       final max = config['depositMaxAmount'];
       _depositMaxAmount = max is num
-          ? (max as num).toDouble()
+          ? max.toDouble()
           : (double.tryParse(max?.toString() ?? '') ?? 10000);
 
       _feeRules = config['feeRules'] is Map
           ? Map<String, dynamic>.from(config['feeRules'] as Map)
           : {};
     } catch (e) {
-      setState(() => _error = e.toString());
+      final msg = e.toString();
+      final friendly = msg.contains('unavailable') || msg.contains('UNAVAILABLE')
+          ? 'Firestore is temporarily unavailable. Please try again in a moment.'
+          : msg.contains('permission') || msg.contains('PERMISSION_DENIED')
+              ? 'Permission denied. Check your admin role.'
+              : 'Could not load config. Please try again.';
+      setState(() => _error = friendly);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -75,14 +81,20 @@ class _AdminFeesPageState extends State<AdminFeesPage> {
       await _adminSettings.refresh();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Fees and deposit config saved'),
-            backgroundColor: AppTheme.success,
+          SnackBar(
+            content: const Text('Fees and deposit config saved'),
+            backgroundColor: AppTheme.primaryBlue,
           ),
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) {
+        final msg = e.toString();
+        final friendly = msg.contains('unavailable') || msg.contains('UNAVAILABLE')
+            ? 'Firestore is temporarily unavailable. Please try again.'
+            : 'Could not save. Please try again.';
+        setState(() => _error = friendly);
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -117,16 +129,30 @@ class _AdminFeesPageState extends State<AdminFeesPage> {
                 children: [
                   if (_error != null) ...[
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      padding: const EdgeInsets.all(16),
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
                         color: AppTheme.error.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: AppTheme.error),
                       ),
-                      child: Text(
-                        _error!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.error),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _error!,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.error),
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton.icon(
+                            onPressed: () {
+                              setState(() => _error = null);
+                              _load();
+                            },
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('Retry'),
+                          ),
+                        ],
                       ),
                     ),
                   ],

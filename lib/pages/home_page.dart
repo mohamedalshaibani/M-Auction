@@ -7,12 +7,13 @@ import '../utils/format.dart';
 import '../widgets/header_logo.dart';
 import '../widgets/unified_app_bar.dart';
 import '../widgets/admin_support_badge.dart';
-import '../widgets/watch_brand_picker.dart';
+import '../widgets/brand_picker.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
+import '../services/brand_service.dart';
 import '../services/ads_service.dart';
 import '../models/category_model.dart';
-import '../models/watch_brand.dart';
+import '../models/brand_model.dart';
 import 'listing_flow_gate_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -952,10 +953,11 @@ class _CategoryListingPage extends StatefulWidget {
 
 class _CategoryListingPageState extends State<_CategoryListingPage> {
   final _adminSettings = AdminSettingsService();
+  final _brandService = BrandService();
   List<Subcategory> _subcategories = [];
   String? _selectedSubcategoryId; // null = All
-  List<WatchBrand> _watchBrands = [];
-  String? _selectedWatchBrandId; // null = All (when category is watches)
+  List<Brand> _brands = [];
+  String? _selectedBrandId; // null = All
 
   @override
   void initState() {
@@ -966,12 +968,10 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
   Future<void> _loadSubcategories() async {
     try {
       final list = await _adminSettings.getSubcategories(widget.categoryGroupId);
-      final watchBrands = widget.categoryGroupId == 'watches'
-          ? await _adminSettings.getWatchBrands()
-          : <WatchBrand>[];
+      final brands = await _brandService.getBrands(category: widget.categoryGroupId);
       if (mounted) setState(() {
         _subcategories = list;
-        _watchBrands = watchBrands;
+        _brands = brands;
       });
     } catch (_) {}
   }
@@ -1024,14 +1024,14 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                         ],
                       ),
                     ),
-                    if (widget.categoryGroupId == 'watches' && _watchBrands.isNotEmpty)
+                    if (_brands.isNotEmpty)
                       const SizedBox(height: 10),
                   ],
-                  if (widget.categoryGroupId == 'watches' && _watchBrands.isNotEmpty)
-                    WatchBrandPicker(
-                      brands: _watchBrands,
-                      selectedBrandId: _selectedWatchBrandId,
-                      onChanged: (value) => setState(() => _selectedWatchBrandId = value),
+                  if (_brands.isNotEmpty)
+                    BrandPicker(
+                      brands: _brands,
+                      selectedBrandId: _selectedBrandId,
+                      onChanged: (value) => setState(() => _selectedBrandId = value),
                       allowAll: true,
                       label: 'Brand',
                     ),
@@ -1091,22 +1091,15 @@ class _CategoryListingPageState extends State<_CategoryListingPage> {
                   final groupId = widget.categoryGroupId;
                   final groupIdNorm = groupId.toLowerCase();
                   final subId = _selectedSubcategoryId;
-                  final brandId = _selectedWatchBrandId;
+                  final brandId = _selectedBrandId;
                   final filteredDocs = snapshot.data!.docs.where((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     if (!isAuctionOpenForPublicBrowsing(data)) return false;
                     if (effectiveCategoryGroupNormalized(data) != groupIdNorm) return false;
                     if (subId != null && effectiveSubcategory(data) != subId) return false;
-                    if (groupId == 'watches' && brandId != null) {
+                    if (brandId != null) {
                       final bid = data['brandId'] as String?;
-                      final b = data['brand'] as String?;
-                      final matchId = bid == brandId;
-                      String? selectedName;
-                      for (final w in _watchBrands) {
-                        if (w.id == brandId) { selectedName = w.name; break; }
-                      }
-                      final matchName = selectedName != null && b == selectedName;
-                      if (!matchId && !matchName) return false;
+                      if (bid != brandId) return false;
                     }
                     return true;
                   }).toList();

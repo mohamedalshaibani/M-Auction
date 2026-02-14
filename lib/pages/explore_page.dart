@@ -3,14 +3,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../services/auction_service.dart';
 import '../services/admin_settings_service.dart';
+import '../services/brand_service.dart';
 import '../models/category_model.dart';
+import '../models/brand_model.dart';
 import '../models/watch_brand.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/header_logo.dart';
 import '../widgets/unified_app_bar.dart';
 import '../widgets/admin_support_badge.dart';
-import '../widgets/watch_brand_picker.dart';
+import '../widgets/brand_picker.dart';
 
 class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key});
@@ -23,12 +25,13 @@ class _ExplorePageState extends State<ExplorePage> {
   final _searchController = TextEditingController();
   final _auctionService = AuctionService();
   final _adminSettings = AdminSettingsService();
+  final _brandService = BrandService();
   List<CategoryGroup> _categoryGroups = defaultTopLevelCategories;
   String? _selectedCategoryGroupId; // null = All
   String? _selectedSubcategoryId;
   List<Subcategory> _subcategories = [];
-  List<WatchBrand> _watchBrands = [];
-  String? _selectedWatchBrandId; // null = All (when category is watches)
+  List<Brand> _brands = [];
+  String? _selectedBrandId; // null = All (when category has brands)
   // Only active auctions are shown; ended auctions are hidden from Explore
 
   @override
@@ -50,19 +53,19 @@ class _ExplorePageState extends State<ExplorePage> {
         _selectedCategoryGroupId = null;
         _selectedSubcategoryId = null;
         _subcategories = [];
-        _watchBrands = [];
-        _selectedWatchBrandId = null;
+        _brands = [];
+        _selectedBrandId = null;
       });
       return;
     }
     final subs = await _adminSettings.getSubcategories(groupId);
-    final watchBrands = groupId == 'watches' ? await _adminSettings.getWatchBrands() : <WatchBrand>[];
+    final brands = await _brandService.getBrands(category: groupId);
     if (mounted) setState(() {
       _selectedCategoryGroupId = groupId;
       _subcategories = subs;
       _selectedSubcategoryId = null;
-      _watchBrands = watchBrands;
-      _selectedWatchBrandId = null;
+      _brands = brands;
+      _selectedBrandId = null;
     });
   }
 
@@ -172,12 +175,12 @@ class _ExplorePageState extends State<ExplorePage> {
                       ),
                     ),
                   ],
-                  if (_selectedCategoryGroupId == 'watches' && _watchBrands.isNotEmpty) ...[
+                  if (_selectedCategoryGroupId != null && _brands.isNotEmpty) ...[
                     const SizedBox(height: 6),
-                    WatchBrandPicker(
-                      brands: _watchBrands,
-                      selectedBrandId: _selectedWatchBrandId,
-                      onChanged: (value) => setState(() => _selectedWatchBrandId = value),
+                    BrandPicker(
+                      brands: _brands,
+                      selectedBrandId: _selectedBrandId,
+                      onChanged: (value) => setState(() => _selectedBrandId = value),
                       allowAll: true,
                       label: 'Brand',
                     ),
@@ -282,17 +285,10 @@ class _ExplorePageState extends State<ExplorePage> {
                         effectiveSubcategory(data) != _selectedSubcategoryId) return false;
                   }
                   
-                  // Brand filter (when category is watches)
-                  if (_selectedCategoryGroupId == 'watches' && _selectedWatchBrandId != null) {
+                  // Brand filter
+                  if (_selectedBrandId != null) {
                     final bid = data['brandId'] as String?;
-                    final b = data['brand'] as String?;
-                    final matchId = bid == _selectedWatchBrandId;
-                    String? selectedName;
-                    for (final w in _watchBrands) {
-                      if (w.id == _selectedWatchBrandId) { selectedName = w.name; break; }
-                    }
-                    final matchName = selectedName != null && b == selectedName;
-                    if (!matchId && !matchName) return false;
+                    if (bid != _selectedBrandId) return false;
                   }
                   
                   // Search filter (title, description, brand)

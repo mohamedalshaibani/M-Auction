@@ -12,14 +12,13 @@ class AuctionService {
   final ContractService _contractService = ContractService();
   final PaymentService _paymentService = PaymentService();
 
-  // Create draft auction (categoryGroup + subcategory are source of truth; category kept for legacy)
-  // For watches, pass brandId (from watch brands list) and brand (display name). Legacy: brand only.
+  // Create draft auction. All auctions reference brandId; brand (name) stored denormalized for display.
   Future<String> createDraftAuction({
     required String sellerId,
     required String categoryGroup,
     required String subcategory,
+    required String brandId,
     required String brand,
-    String? brandId,
     required String title,
     required String description,
     required String condition,
@@ -62,9 +61,7 @@ class AuctionService {
       'buyerConfirmedDelivery': false,
       'contactUnlockAt': null,
     };
-    if (brandId != null && brandId.isNotEmpty) {
-      payload['brandId'] = brandId;
-    }
+    payload['brandId'] = brandId;
     await auctionRef.set(payload);
 
     return auctionRef.id;
@@ -92,7 +89,7 @@ class AuctionService {
     final condition = data['condition'] as String?;
     final itemIdentifier = data['itemIdentifier'] as String?;
     final startPrice = (data['startPrice'] as num?)?.toDouble() ?? 0.0;
-    final brand = data['brand'] as String?;
+    final brandId = data['brandId'] as String?;
 
     if (title == null || title.trim().isEmpty) {
       throw Exception('Title is required');
@@ -106,7 +103,7 @@ class AuctionService {
     if (itemIdentifier == null || itemIdentifier.trim().isEmpty) {
       throw Exception('Item identifier is required');
     }
-    if (brand == null || brand.trim().isEmpty) {
+    if (brandId == null || brandId.trim().isEmpty) {
       throw Exception('Brand is required');
     }
     if (startPrice <= 0) {

@@ -351,9 +351,9 @@ class _AdminSupportThreadPageState extends State<AdminSupportThreadPage> {
           }, SetOptions(merge: true));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Conversation closed'),
-            backgroundColor: AppTheme.success,
+          SnackBar(
+            content: const Text('Conversation closed'),
+            backgroundColor: AppTheme.primaryBlue,
           ),
         );
       }

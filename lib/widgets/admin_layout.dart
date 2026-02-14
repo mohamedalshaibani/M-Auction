@@ -17,7 +17,7 @@ const EdgeInsets kAdminCardMargin = EdgeInsets.symmetric(
 /// Standard card inner padding — matches app theme (generous, 20).
 const EdgeInsets kAdminCardPadding = EdgeInsets.all(20);
 
-/// Section titles for app bar (index 0–6).
+/// Section titles for app bar (index 0–7).
 const List<String> kAdminSectionTitles = [
   'Auctions',
   'Deposits',
@@ -25,10 +25,11 @@ const List<String> kAdminSectionTitles = [
   'Finance',
   'Ads',
   'Support',
+  'Brands',
   'Admins',
 ];
 
-/// Icons for each admin section (0–6).
+/// Icons for each admin section (0–7).
 const List<IconData> kAdminSectionIcons = [
   Icons.gavel_rounded,
   Icons.account_balance_wallet_rounded,
@@ -36,8 +37,88 @@ const List<IconData> kAdminSectionIcons = [
   Icons.attach_money_rounded,
   Icons.campaign_rounded,
   Icons.chat_bubble_outline_rounded,
+  Icons.branding_watermark_rounded,
   Icons.admin_panel_settings_rounded,
 ];
+
+/// Breakpoint for web layout (sidebar vs bottom nav).
+const double kAdminWebBreakpoint = 900;
+
+/// Sidebar nav for admin sections on web/wide screens.
+class AdminSidebar extends StatelessWidget {
+  const AdminSidebar({
+    super.key,
+    required this.currentIndex,
+    required this.onTap,
+    this.supportUnreadCount = 0,
+  });
+
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  final int supportUnreadCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: 220,
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        border: Border(right: BorderSide(color: AppTheme.border)),
+      ),
+      child: SafeArea(
+        right: false,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          children: List.generate(8, (index) {
+            final selected = index == currentIndex;
+            final icon = kAdminSectionIcons[index];
+            final label = kAdminSectionTitles[index];
+            final isSupport = index == 5;
+            return ListTile(
+              leading: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    icon,
+                    size: 22,
+                    color: selected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+                  ),
+                  if (isSupport && supportUnreadCount > 0)
+                    Positioned(
+                      top: -4,
+                      right: -6,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.error,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              title: Text(
+                label,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: selected ? AppTheme.primaryBlue : AppTheme.textPrimary,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+              selected: selected,
+              selectedTileColor: AppTheme.primaryBlue.withValues(alpha: 0.08),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              onTap: () => onTap(index),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
 
 /// Bottom navigation for admin sections. Uses theme typography (Inter) and design system colors.
 class AdminBottomNav extends StatelessWidget {
@@ -77,12 +158,12 @@ class AdminBottomNav extends StatelessWidget {
           height: 56,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: List.generate(7, (index) {
+            children: List.generate(8, (index) {
               final selected = index == currentIndex;
               final color = selected ? selectedColor : unselectedColor;
               final icon = kAdminSectionIcons[index];
               final label = kAdminSectionTitles[index];
-              final isSupport = index == 5;
+              final isSupport = index == 5; // Support tab
 
               return Expanded(
                 child: Material(
@@ -140,7 +221,26 @@ class AdminBottomNav extends StatelessWidget {
   }
 }
 
+/// Standard admin primary button style (compact, matches app buttons).
+ButtonStyle get kAdminPrimaryButtonStyle => ElevatedButton.styleFrom(
+  backgroundColor: AppTheme.primaryBlue,
+  foregroundColor: Colors.white,
+  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+  minimumSize: const Size(0, 44),
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+);
+
+/// Standard admin danger button style.
+ButtonStyle get kAdminDangerButtonStyle => ElevatedButton.styleFrom(
+  backgroundColor: AppTheme.error,
+  foregroundColor: Colors.white,
+  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+  minimumSize: const Size(0, 44),
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+);
+
 /// Minimal admin branding footer. Uses app design system: Inter, 13px, w600.
+/// SafeArea wraps the bar so it sits above home indicator without cutoff.
 class AdminFooter extends StatelessWidget {
   const AdminFooter({
     super.key,
@@ -153,13 +253,11 @@ class AdminFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        color: AppTheme.primaryBlue,
-      ),
-      child: SafeArea(
-        top: false,
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 48,
+        decoration: const BoxDecoration(color: AppTheme.primaryBlue),
         child: Row(
           children: [
             if (showBack && onBack != null)
@@ -204,12 +302,13 @@ class AdminLayout extends StatelessWidget {
   final bool showBack;
   final List<Widget>? actions;
 
+  /// Wraps admin sub-page with footer. Uses Scaffold so footer renders correctly
+  /// (correct height, safe area, no overlap/cutoff).
   static Widget wrap(Widget page) {
-    return Column(
-      children: [
-        Expanded(child: page),
-        const AdminFooter(),
-      ],
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundLight,
+      body: page,
+      bottomNavigationBar: const AdminFooter(),
     );
   }
 
